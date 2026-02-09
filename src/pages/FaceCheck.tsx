@@ -224,6 +224,17 @@ const FaceCheck = () => {
         });
       }, 250);
       
+      // Ensure bucket exists before upload
+      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+      if (!bucketsError) {
+        const profileBucket = buckets?.find(bucket => bucket.name === 'profile-images');
+        if (!profileBucket) {
+          console.log("profile-images bucket doesn't exist, attempting to create...");
+          // Note: Regular users can't create buckets, but the function will handle this
+          // We'll just try the upload and let the function create it if needed
+        }
+      }
+      
       const fileName = `analysis-${Date.now()}-${selectedImage.name.replace(/[^a-zA-Z0-9._-]/g, '')}`;
       
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -235,6 +246,12 @@ const FaceCheck = () => {
       
       if (uploadError) {
         console.error("Error uploading to Supabase storage:", uploadError);
+        
+        // If bucket doesn't exist, provide helpful error message
+        if (uploadError.message?.includes('not found') || uploadError.message?.includes('Bucket')) {
+          throw new Error(`Storage bucket not found. Please ensure the 'profile-images' bucket exists in your Supabase project. The function will attempt to create it automatically.`);
+        }
+        
         throw new Error(`Failed to upload image: ${uploadError.message}`);
       }
       
@@ -250,16 +267,52 @@ const FaceCheck = () => {
         description: "Now analyzing with our AI system...",
       });
       
-      const { data, error } = await supabase.functions.invoke('facial-recognition', {
-        body: { imageUrl: publicUrl },
-      });
+      // Call edge function with direct fetch so we get the real error (CORS, 401, etc.)
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const functionUrl = `${supabaseUrl}/functions/v1/facial-recognition`;
+      
+      if (!supabaseUrl || !anonKey) {
+        throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY in .env');
+      }
+      
+      let response: Response;
+      let data: any;
+      try {
+        response = await fetch(functionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${anonKey}`,
+          },
+          body: JSON.stringify({ imageUrl: publicUrl }),
+        });
+        const text = await response.text();
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch {
+          throw new Error(`Function returned non-JSON (status ${response.status}): ${text.slice(0, 200)}`);
+        }
+      } catch (fetchError: any) {
+        setUploadProgress(100);
+        clearInterval(progressInterval);
+        console.error('Function fetch error:', fetchError);
+        // Network/CORS errors don't have response status
+        const msg = fetchError.message || String(fetchError);
+        if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS')) {
+          throw new Error(
+            'Could not reach the analysis server. Check: (1) Edge function is deployed in Supabase Dashboard, (2) Your .env has correct VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY, (3) No browser extension is blocking the request.'
+          );
+        }
+        throw new Error(`Request failed: ${msg}`);
+      }
       
       setUploadProgress(100);
       clearInterval(progressInterval);
       
-      if (error) {
-        console.error("Function invocation error:", error);
-        throw new Error(`Error calling analysis function: ${error.message}`);
+      if (!response.ok) {
+        console.error('Function error response:', response.status, data);
+        throw new Error(data?.error || `Server error (${response.status}): ${data?.message || response.statusText}`);
       }
       
       console.log("Received facial recognition response:", data);

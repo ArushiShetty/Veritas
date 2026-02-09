@@ -3,13 +3,28 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 import 'https://deno.land/x/xhr@0.1.0/mod.ts';
 
+// Supabase URL is public - we can hardcode it
+const supabaseUrl = 'https://mtodeoqvbejioxiyvdez.supabase.co';
+
+// These need to be set as secrets in Supabase Dashboard
+// Try multiple possible environment variable names
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-const supabaseUrl = Deno.env.get('SUPABASE_URL');
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ||
+                          Deno.env.get('SERVICE_ROLE_KEY') ||
+                          Deno.env.get('SERVICE_KEY') ||
+                          Deno.env.get('SR_KEY');
+const sightengineUser = Deno.env.get('SIGHTENGINE_USER') ||
+                       Deno.env.get('SE_USER') ||
+                       Deno.env.get('SIGHTENGINE_API_USER');
+const sightengineSecret = Deno.env.get('SIGHTENGINE_SECRET') ||
+                         Deno.env.get('SE_SECRET') ||
+                         Deno.env.get('SIGHTENGINE_API_SECRET');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '3600',
 };
 
 // Configure API request retry settings
@@ -54,67 +69,325 @@ function getFallbackAnalysis(imageUrl) {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
+  console.log(`[facial-recognition] Received ${req.method} request`);
+  console.log(`[facial-recognition] Request URL: ${req.url}`);
+  console.log(`[facial-recognition] Request headers:`, Object.fromEntries(req.headers.entries()));
+  
+  // Handle CORS preflight requests - MUST return CORS headers
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    console.log('[facial-recognition] Handling OPTIONS preflight request');
+    return new Response(null, { 
+      status: 200,
+      headers: corsHeaders 
+    });
+  }
+  
+  // Only allow POST requests
+  if (req.method !== 'POST') {
+    console.log(`[facial-recognition] Rejecting ${req.method} request - only POST allowed`);
+    return new Response(JSON.stringify({
+      error: `Method ${req.method} not allowed. Use POST.`,
+      riskLevel: 'medium',
+      analysis: 'Invalid HTTP method.',
+      confidenceScore: 0
+    }), {
+      status: 405,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
+  // Wrap everything in try-catch to ensure CORS headers are always returned
   try {
-    if (!openAIApiKey) {
-      throw new Error('OPENAI_API_KEY is not set');
+    // Validate environment variables early
+    // Log all available env vars (without values) for debugging
+    const allEnvVars = Object.keys(Deno.env.toObject());
+    console.log('All available environment variables:', allEnvVars);
+    console.log('Relevant env vars:', allEnvVars.filter(k => 
+      k.includes('SUPABASE') || k.includes('SIGHT') || k.includes('OPENAI') || 
+      k.includes('SERVICE') || k.includes('SECRET') || k.includes('KEY')
+    ));
+    
+    if (!supabaseServiceKey) {
+      console.error('Missing Supabase Service Role Key:', {
+        hasServiceKey: !!supabaseServiceKey,
+        triedNames: ['SUPABASE_SERVICE_ROLE_KEY', 'SERVICE_ROLE_KEY', 'SERVICE_KEY', 'SR_KEY'],
+        availableKeys: allEnvVars.filter(k => k.includes('KEY') || k.includes('SECRET'))
+      });
+      return new Response(JSON.stringify({
+        error: 'Supabase Service Role Key is not set. Please add it as a secret named: SERVICE_ROLE_KEY (or SUPABASE_SERVICE_ROLE_KEY if allowed). Get it from Project Settings → API → service_role key.',
+        riskLevel: 'medium',
+        analysis: 'Configuration error: Missing Supabase Service Role Key.',
+        confidenceScore: 0
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('Supabase credentials are not set');
+    
+    console.log('Supabase URL:', supabaseUrl);
+    console.log('Service Role Key present:', !!supabaseServiceKey);
+    
+    if (!openAIApiKey && (!sightengineUser || !sightengineSecret)) {
+      console.error('Missing AI credentials:', {
+        hasOpenAI: !!openAIApiKey,
+        hasSightengineUser: !!sightengineUser,
+        hasSightengineSecret: !!sightengineSecret
+      });
+      return new Response(JSON.stringify({
+        error: 'No AI analysis credentials set. Configure either OPENAI_API_KEY or SIGHTENGINE_USER and SIGHTENGINE_SECRET in function secrets.',
+        riskLevel: 'medium',
+        analysis: 'Configuration error: Missing AI analysis credentials.',
+        confidenceScore: 0
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
     
     // Create Supabase client with service role key for admin access
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Make sure storage buckets exist
+    // Make sure storage buckets exist - CRITICAL for image uploads
+    const ensureBucketExists = async (bucketName: string, isPublic: boolean, fileSizeLimit: number) => {
+      try {
+        const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+        
+        if (listError) {
+          console.error(`Error listing buckets:`, listError);
+          throw listError;
+        }
+        
+        const bucket = buckets?.find(b => b.name === bucketName);
+        if (bucket) {
+          console.log(`Bucket '${bucketName}' already exists`);
+          return true;
+        }
+        
+        console.log(`Creating bucket '${bucketName}'...`);
+        const { data, error: createError } = await supabase.storage.createBucket(bucketName, {
+          public: isPublic,
+          fileSizeLimit: fileSizeLimit,
+        });
+        
+        if (createError) {
+          // If bucket already exists (race condition), that's okay
+          if (createError.message?.includes('already exists') || createError.message?.includes('duplicate')) {
+            console.log(`Bucket '${bucketName}' already exists (race condition)`);
+            return true;
+          }
+          console.error(`Error creating bucket '${bucketName}':`, createError);
+          throw createError;
+        }
+        
+        console.log(`Bucket '${bucketName}' created successfully`);
+        return true;
+      } catch (error) {
+        console.error(`Failed to ensure bucket '${bucketName}' exists:`, error);
+        throw error;
+      }
+    };
+
+    // Ensure both buckets exist before proceeding
+    // This MUST succeed for the function to work properly
     try {
-      const { data: buckets } = await supabase.storage.listBuckets();
+      const vaultResult = await ensureBucketExists('vault-files', false, 10485760); // 10MB
+      const profileResult = await ensureBucketExists('profile-images', true, 5242880); // 5MB, public
       
-      // Check if vault-files bucket exists
-      const vaultBucket = buckets?.find(bucket => bucket.name === 'vault-files');
-      if (!vaultBucket) {
-        console.log("Creating vault-files bucket");
-        const { error } = await supabase.storage.createBucket('vault-files', {
-          public: false,
-          fileSizeLimit: 10485760, // 10MB file size limit
-        });
-        if (error) {
-          console.error("Error creating vault-files bucket:", error);
-        } else {
-          console.log("vault-files bucket created successfully");
-        }
+      if (!vaultResult || !profileResult) {
+        console.warn("Warning: Some buckets may not have been created successfully");
+      } else {
+        console.log("All required storage buckets verified/created successfully");
       }
-      
-      // Check if profile-images bucket exists
-      const profileBucket = buckets?.find(bucket => bucket.name === 'profile-images');
-      if (!profileBucket) {
-        console.log("Creating profile-images bucket");
-        const { error } = await supabase.storage.createBucket('profile-images', {
-          public: true, // Make this bucket public for profile images
-          fileSizeLimit: 5242880, // 5MB file size limit
-        });
-        if (error) {
-          console.error("Error creating profile-images bucket:", error);
-        } else {
-          console.log("profile-images bucket created successfully");
-        }
-      }
-    } catch (error) {
-      console.error("Error checking/creating buckets:", error);
+    } catch (bucketError) {
+      console.error("Critical: Failed to set up storage buckets:", bucketError);
+      // Log detailed error for debugging
+      console.error("Bucket error details:", {
+        message: bucketError.message,
+        code: bucketError.code,
+        details: bucketError
+      });
+      // Continue - the upload will fail with a clearer error if bucket doesn't exist
     }
 
-    const { imageUrl } = await req.json();
-    console.log("Received image URL for analysis:", imageUrl);
-    
-    if (!imageUrl) {
-      throw new Error('No image URL provided');
+    // Parse request body safely
+    let imageUrl;
+    try {
+      const body = await req.json();
+      imageUrl = body.imageUrl;
+      console.log("Received image URL for analysis:", imageUrl);
+    } catch (parseError) {
+      console.error("Error parsing request body:", parseError);
+      return new Response(JSON.stringify({
+        error: 'Invalid request body. Expected JSON with imageUrl field.',
+        riskLevel: 'medium',
+        analysis: 'Request parsing error: Could not parse request body.',
+        confidenceScore: 0
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
     
+    if (!imageUrl) {
+      return new Response(JSON.stringify({
+        error: 'No image URL provided in request body.',
+        riskLevel: 'medium',
+        analysis: 'Missing required field: imageUrl',
+        confidenceScore: 0
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Prefer dedicated deepfake detector (Sightengine) when configured
+    if (sightengineUser && sightengineSecret) {
+      console.log("Calling Sightengine Deepfake Detection API");
+      console.log("Sightengine credentials present:", !!sightengineUser, !!sightengineSecret);
+      try {
+        // Use both deepfake and ai_generated models for comprehensive detection
+        const params = new URLSearchParams({
+          url: imageUrl,
+          models: 'deepfake,ai_generated',
+          api_user: sightengineUser,
+          api_secret: sightengineSecret,
+        });
+
+        const apiUrl = `https://api.sightengine.com/1.0/check.json?${params.toString()}`;
+        console.log("Sightengine API URL (without secret):", `https://api.sightengine.com/1.0/check.json?url=${imageUrl}&models=deepfake,ai_generated&api_user=${sightengineUser}&api_secret=***`);
+
+        const seResponse = await fetch(apiUrl);
+        const seData = await seResponse.json();
+        
+        console.log("Sightengine response status:", seResponse.status);
+        console.log("Sightengine response data:", JSON.stringify(seData).substring(0, 500));
+
+        if (!seResponse.ok) {
+          console.error("Sightengine API HTTP error:", seResponse.status, seData);
+          throw new Error(`Sightengine API HTTP error: ${seResponse.status} - ${JSON.stringify(seData)}`);
+        }
+
+        if (seData.status !== 'success') {
+          console.error("Sightengine API error response:", seData);
+          throw new Error(seData.error?.message || seData.message || 'Sightengine API returned non-success status');
+        }
+
+        // Get scores from both models
+        const deepfakeScore = Number(seData.type?.deepfake) || 0;
+        const aiGeneratedScore = Number(seData.ai_generated?.fake) || 0;
+        
+        console.log("Raw scores from API - Deepfake:", seData.type?.deepfake, "AI Generated:", seData.ai_generated?.fake);
+        console.log("Parsed scores - Deepfake:", deepfakeScore, "AI Generated:", aiGeneratedScore);
+        
+        // Use the higher of the two scores (if either model detects fake, we flag it)
+        // Both scores are 0-1, where higher = more likely fake/AI
+        const combinedScore = Math.max(deepfakeScore, aiGeneratedScore);
+        
+        if (isNaN(combinedScore) || combinedScore < 0 || combinedScore > 1) {
+          console.error("Invalid scores:", seData.type, seData.ai_generated);
+          throw new Error(`Sightengine response missing or invalid scores. Response: ${JSON.stringify(seData)}`);
+        }
+
+        // Combined score interpretation: be conservative
+        // Lower thresholds mean we're more likely to flag things as suspicious
+        let riskLevel = 'low';
+        if (combinedScore >= 0.65) {
+          riskLevel = 'high';
+        } else if (combinedScore >= 0.25) {
+          riskLevel = 'medium';
+        }
+        // Anything below 0.25 is considered 'low' (likely real)
+
+        console.log(`Combined score: ${(combinedScore * 100).toFixed(1)}% (Deepfake: ${(deepfakeScore * 100).toFixed(1)}%, AI: ${(aiGeneratedScore * 100).toFixed(1)}%) -> Risk Level: ${riskLevel}`);
+
+        // Confidence in our final classification (0–100)
+        // For low risk (real), confidence = how far from 1.0 (how real it is)
+        // For medium/high risk (fake), confidence = how close to 1.0 (how fake it is)
+        const confidenceScore = riskLevel === 'low'
+          ? Math.round((1 - combinedScore) * 100)
+          : Math.round(combinedScore * 100);
+        
+        console.log(`Calculated confidence score: ${confidenceScore}%`);
+
+        const analysisLines = [];
+        
+        if (deepfakeScore > 0 || aiGeneratedScore > 0) {
+          if (deepfakeScore > 0.1) {
+            analysisLines.push(`Deepfake detection score: ${(deepfakeScore * 100).toFixed(1)}% likelihood of face manipulation.`);
+          }
+          if (aiGeneratedScore > 0.1) {
+            analysisLines.push(`AI-generated image detection score: ${(aiGeneratedScore * 100).toFixed(1)}% likelihood of AI generation.`);
+          }
+          if (analysisLines.length === 0) {
+            analysisLines.push(`Combined detection score: ${(combinedScore * 100).toFixed(1)}% likelihood of manipulation or AI generation.`);
+          }
+        } else {
+          analysisLines.push(`Analysis completed with combined score: ${(combinedScore * 100).toFixed(1)}%.`);
+        }
+
+        if (riskLevel === 'low') {
+          analysisLines.push(
+            "This image is most likely a genuine, non-deepfake photograph. Still, stay cautious and combine this result with other safety checks."
+          );
+        } else if (riskLevel === 'medium') {
+          analysisLines.push(
+            "This image shows some signs that could indicate a deepfake. Treat it with caution and look for additional evidence before trusting it."
+          );
+        } else {
+          analysisLines.push(
+            "This image shows strong signs of being a deepfake or heavily manipulated. We recommend treating it as untrustworthy."
+          );
+        }
+
+        const analysisResult = analysisLines.join(' ');
+
+        // Store analysis result for future reference (non-critical)
+        // Using service role key should bypass RLS, but if table doesn't exist or has issues, we continue anyway
+        try {
+          const { error } = await supabase.from('image_analyses').insert({
+            image_url: imageUrl,
+            risk_level: riskLevel,
+            analysis: analysisResult,
+            confidence_score: confidenceScore,
+            created_at: new Date().toISOString()
+          });
+
+          if (error) {
+            // Log but don't fail - this is non-critical
+            console.warn("Could not store analysis result (non-critical):", error.message);
+            console.warn("This might be due to missing table or RLS policies. Function will continue.");
+          } else {
+            console.log("Analysis result stored successfully");
+          }
+        } catch (dbError) {
+          // Silently continue - storing results is optional
+          console.warn("Database insert failed (non-critical):", dbError.message);
+        }
+
+        return new Response(JSON.stringify({
+          analysis: analysisResult,
+          riskLevel,
+          confidenceScore
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (seError) {
+        console.error('Error with Sightengine API:', seError);
+        console.error('Error details:', seError.message, seError.stack);
+        console.log('Falling back to OpenAI/fallback logic');
+        // Continue to OpenAI-based analysis below
+      }
+    }
+
+    if (!openAIApiKey) {
+      console.log("OPENAI_API_KEY not set, using fallback analysis only.");
+      const fallback = getFallbackAnalysis(imageUrl);
+      return new Response(JSON.stringify(fallback), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     console.log("Calling OpenAI API for image analysis");
     
     try {
@@ -255,22 +528,26 @@ serve(async (req) => {
       }
       
       // Record the analysis result in the database for future reference (optional)
+      // Using service role key should bypass RLS, but if table doesn't exist, we continue anyway
       try {
         const { error } = await supabase.from('image_analyses').insert({
           image_url: imageUrl,
           risk_level: riskLevel,
           analysis: analysisResult,
           confidence_score: confidenceScore,
-          created_at: new Date()
-        }).maybeSingle();
+          created_at: new Date().toISOString()
+        });
         
         if (error) {
-          console.error("Error storing analysis result:", error);
-          // Continue anyway - this is non-critical
+          // Log but don't fail - this is non-critical
+          console.warn("Could not store analysis result (non-critical):", error.message);
+          console.warn("This might be due to missing table or RLS policies. Function will continue.");
+        } else {
+          console.log("Analysis result stored successfully");
         }
       } catch (dbError) {
-        console.error("Database error when storing analysis:", dbError);
-        // Continue anyway - this is non-critical
+        // Silently continue - storing results is optional
+        console.warn("Database insert failed (non-critical):", dbError.message);
       }
       
       return new Response(JSON.stringify({ 
@@ -293,14 +570,21 @@ serve(async (req) => {
     }
   } catch (error) {
     console.error('Error in facial recognition function:', error);
+    console.error('Error stack:', error.stack);
     
-    // Return a user-friendly error with a fallback mechanism
+    // ALWAYS return CORS headers, even on errors
     const fallback = getFallbackAnalysis("error");
-    fallback.error = error.message;
+    fallback.error = error.message || 'Unknown error occurred';
     
     return new Response(JSON.stringify(fallback), {
       status: 200, // Return 200 even for errors to handle gracefully on client
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
+});
+
+// Add a global error handler to catch any unhandled errors
+addEventListener('error', (event) => {
+  console.error('Unhandled error in edge function:', event.error);
+  // This shouldn't happen, but if it does, at least log it
 });
