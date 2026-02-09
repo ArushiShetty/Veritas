@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import ProfileGuard from "./pages/ProfileGuard";
+import ProfileGuardScanner from "./pages/ProfileGuardScanner";
 import ReportSubmission from "./pages/ReportSubmission";
 import Evidence from "./pages/Evidence";
 import Quiz from "./pages/Quiz";
@@ -16,7 +17,6 @@ import EmergencyVault from "./pages/EmergencyVault";
 import Login from "./pages/Login";
 import SignIn from "./pages/SignIn";
 import SafetyAnalyzer from "./pages/SafetyAnalyzer";
-import ProfileGuardScanner from "./pages/ProfileGuardScanner";
 import VoiceAssistant from "./pages/VoiceAssistant";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -65,10 +65,11 @@ const App = () => {
             {/* Public routes */}
             <Route path="/signin" element={!isLoggedIn ? <SignIn /> : <Navigate to="/" />} />
             <Route path="/login" element={!isLoggedIn ? <Login /> : <Navigate to="/" />} />
+            <Route path="/" element={<Index />} />
+            <Route path="/profile-guard-scanner" element={<ProfileGuardScanner />} />
             
             {/* Protected routes - redirect to login if not authenticated */}
-            <Route path="/" element={isLoggedIn ? <Index /> : <Navigate to="/signin" />} />
-            <Route path="/profile-guard" element={isLoggedIn ? <ProfileGuard /> : <Navigate to="/signin" />} />
+            
             <Route path="/report" element={isLoggedIn ? <ReportSubmission /> : <Navigate to="/signin" />} />
             <Route path="/evidence" element={isLoggedIn ? <Evidence /> : <Navigate to="/signin" />} />
             <Route path="/quiz" element={isLoggedIn ? <Quiz /> : <Navigate to="/signin" />} />
@@ -78,7 +79,6 @@ const App = () => {
             <Route path="/vault" element={isLoggedIn ? <EmergencyVault /> : <Navigate to="/signin" />} />
             <Route path="/analyzer" element={isLoggedIn ? <SafetyAnalyzer /> : <Navigate to="/signin" />} />
             <Route path="/voice-assistant" element={isLoggedIn ? <VoiceAssistant /> : <Navigate to="/signin" />} />
-            <Route path="/profile-guard-scanner" element={<ProfileGuardScanner />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
