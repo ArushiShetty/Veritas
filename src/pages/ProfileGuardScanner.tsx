@@ -27,12 +27,6 @@ type PublicProfileData = {
   private: boolean;
 };
 
-type PrivateProfileData = {
-  picture: string;
-  username: string;
-  private: true;
-};
-
 type QuestionnaireAnswers = {
   userKnowsThem: "yes" | "no";
   hasWeirdMessages: "yes" | "no";
@@ -88,91 +82,130 @@ const QUESTIONNAIRE = [
 
 // Fake check for public profiles: Returns demo result
 function analyzePublicProfile(profile: PublicProfileData): ScanResult {
-  let points = 0;
-  let explanation = "";
+  let score = 0;
+  const reasons: string[] = [];
 
-  // DEMO: Photo AI-check stub, pretend it's random
-  if (profile.picture && profile.picture.includes("randomuser")) {
-    points += 1;
-    explanation += "Profile photo could be AI-generated. ";
+  // Followers & posts consistency
+  if (profile.followers !== null && profile.posts !== null) {
+    if (profile.followers < 50 && profile.posts < 5) {
+      score += 2;
+      reasons.push("Very low followers and posts.");
+    } else if (profile.followers > 1000 && profile.posts < 3) {
+      score += 1;
+      reasons.push("High followers but almost no posts.");
+    }
   }
 
-  if (profile.followers !== null && profile.followers < 20) {
-    points += 1;
-    explanation += "Few followers. ";
+  // Bio quality
+  if (!profile.bio || profile.bio.length < 10) {
+    score += 1;
+    reasons.push("Empty or very short bio.");
   }
 
-  if (profile.posts !== null && profile.posts < 2) {
-    points += 1;
-    explanation += "Few posts. ";
+  if (/dm me|telegram|snap|whatsapp|🔥|😘|onlyfans/i.test(profile.bio)) {
+    score += 2;
+    reasons.push("Bio contains common bait or redirect phrases.");
   }
 
-  if (!profile.bio || /dm me|😘|🔥|friend/i.test(profile.bio)) {
-    points += 1;
-    explanation += "Bio is empty or may be baiting contact. ";
+  // Username pattern check
+  if (/[0-9]{3,}|__|_\.|\.{2,}/.test(profile.username)) {
+    score += 1;
+    reasons.push("Username has bot-like patterns.");
   }
 
-  if (/_|\d/.test(profile.username)) {
-    points += 1;
-    explanation += "Username has suspicious patterns. ";
+  // Stock / generated image heuristic
+  if (profile.picture.includes("randomuser")) {
+    score += 1;
+    reasons.push("Profile image appears auto-generated or stock.");
   }
 
-  let verdict: ScanResult["verdict"] = "Real";
-  if (points >= 4) verdict = "Likely Fake";
-  else if (points >= 2) verdict = "Suspicious";
+  score = Math.min(score, 5);
+
+  let verdict: ScanResult["verdict"];
+  if (score >= 4) verdict = "Likely Fake";
+  else if (score >= 2) verdict = "Suspicious";
+  else verdict = "Real";
+
+  const confidence =
+    verdict === "Likely Fake"
+      ? 85 + score * 2
+      : verdict === "Suspicious"
+        ? 65 + score * 3
+        : 80 - score * 5;
 
   return {
-    threatScore: Math.min(points, 5),
+    threatScore: score,
     verdict,
-    confidence: Math.min(60 + points * 8, 99),
-    explanation: explanation || "No major red flags detected."
+    confidence: Math.min(Math.max(confidence, 55), 98),
+    explanation:
+      reasons.length > 0
+        ? reasons.join(" ")
+        : "No strong red flags detected from public signals."
   };
 }
 
+
 // Private profile questionnaire-based score
 function analyzePrivateAnswers(answers: QuestionnaireAnswers): ScanResult {
-  let points = 0;
-  let explanation = "";
+  let score = 0;
+  const reasons: string[] = [];
 
   if (answers.userKnowsThem === "no") {
-    points += 1;
-    explanation += "You don't know this person. ";
-  }
-  if (answers.profilePicFeelsFake === "yes") {
-    points += 2;
-    explanation += "Profile photo seems fake. ";
-  }
-  if (answers.hasWeirdMessages === "yes") {
-    points += 1;
-    explanation += "Received odd/unusual messages. ";
-  }
-  if (answers.requestsSensitiveInfo === "yes") {
-    points += 2;
-    explanation += "Requested sensitive info (major warning). ";
-  }
-  if (answers.seemsToTargetWomen === "yes") {
-    points += 1;
-    explanation += "Appears to target mainly women. ";
+    score += 1;
+    reasons.push("You do not know this person personally.");
   }
 
-  let verdict: ScanResult["verdict"] = "Real";
-  if (points >= 4) verdict = "Likely Fake";
-  else if (points >= 2) verdict = "Suspicious";
+  if (answers.profilePicFeelsFake === "yes") {
+    score += 2;
+    reasons.push("Profile photo appears AI-generated or inconsistent.");
+  }
+
+  if (answers.hasWeirdMessages === "yes") {
+    score += 2;
+    reasons.push("Odd or manipulative messages detected.");
+  }
+
+  if (answers.requestsSensitiveInfo === "yes") {
+    score += 3;
+    reasons.push("Requests for money or private information (high risk).");
+  }
+
+  if (answers.seemsToTargetWomen === "yes") {
+    score += 1;
+    reasons.push("Account appears to disproportionately target women.");
+  }
+
+  score = Math.min(score, 5);
+
+  let verdict: ScanResult["verdict"];
+  if (score >= 4) verdict = "Likely Fake";
+  else if (score >= 2) verdict = "Suspicious";
+  else verdict = "Real";
+
   return {
-    threatScore: Math.min(points, 5),
+    threatScore: score,
     verdict,
-    confidence: Math.min(60 + points * 8, 99),
-    explanation: explanation || "No major red flags detected."
+    confidence:
+      verdict === "Likely Fake" ? 90 :
+      verdict === "Suspicious" ? 70 : 85,
+    explanation:
+      reasons.length > 0
+        ? reasons.join(" ")
+        : "No major warning signals based on your responses."
   };
 }
 
 // === Main Component ===
 const ProfileGuardScanner: React.FC = () => {
-  const [input, setInput] = useState("");
-  const [scanning, setScanning] = useState(false);
+  // ALL state First (NO logic above this)
+const [input, setInput] = useState("");
+const [scanning, setScanning] = useState(false);
+const [followers, setFollowers] = useState<number>(0);
+const [posts, setPosts] = useState<number>(0);
+const [bio, setBio] = useState<string>("");
 
   // Profile/result data (overwrite on every scan)
-  const [profile, setProfile] = useState<PublicProfileData | PrivateProfileData | null>(null);
+  const [profile, setProfile] = useState<PublicProfileData | null>(null);
   const [result, setResult] = useState<ScanResult | null>(null);
 
   // Private flow state
@@ -219,39 +252,91 @@ const ProfileGuardScanner: React.FC = () => {
     e.preventDefault();
     resetAll();
     setScanning(true);
+    const username = input.trim();
+    const followerCount = followers;
+    const postCount =posts;
+    const profileBio = bio;
+    
+    // Build profile data from manual input
+const profile = {
+  picture: null,
+  username: input,
+  followers,
+  posts,
+  bio,
+  private: false,
+};
+    let threatScore = 0;
+let reasons: string[] = [];
 
-    const userInput = input.trim();
+// Followers & posts logic
+if (followers < 50 && posts < 5) {
+ threatScore += 2;
+  reasons.push("Very low followers and posts");
+}
+
+if (followers > 1000 && posts < 3) {
+  threatScore += 1;
+  reasons.push("High followers but almost no posts");
+}
+
+// Bio checks
+if (!bio || bio.length < 10) {
+  threatScore += 1;
+  reasons.push("Very short or empty bio");
+}
+
+if (/crypto|investment|dm me|forex|giveaway/i.test(bio)) {
+  threatScore += 2;
+  reasons.push("Suspicious keywords in bio");
+}
+
+// Final decision
+let verdict: "Real" | "Suspicious" | "Likely Fake" = "Real";
+
+if (threatScore >= 3) verdict = "Suspicious";
+if (threatScore >= 5) verdict = "Likely Fake";
+
+
+// Set result
+setResult({
+  verdict,
+  threatScore,
+  confidence: Math.min(100, threatScore * 20),
+  explanation: reasons.join(", "),
+});
+
 
     // Check if profile is "private" by pattern match
     const privatePattern = /private|locked|restricted/i;
-    const isPrivateInput = privatePattern.test(userInput);
+    const isPrivateInput = privatePattern.test(input);
 
     await new Promise(res => setTimeout(res, 1200));
 
     if (isPrivateInput) {
-      // Strictly use what the user typed as the profile id/link
       setProfile({
         picture: "https://randomuser.me/api/portraits/women/65.jpg",
-        username: userInput, // Always user input
+        username: input,
+        followers: null,
+        posts: null,
+        bio: "",
         private: true,
       });
-      setPrivateProfilePic("https://randomuser.me/api/portraits/women/65.jpg");
+    
       setIsPrivate(true);
       setShowQuestionnaire(true);
       setResult(null);
-    } else {
+      return;
+    }
+    else {
       // Use the exact input as the identifier (even if it's a link, show it as the username)
       // Demo: randomize only other fields, display entered link
-      const nFollowers = Math.floor(Math.random() * 10000);
-      const nPosts = Math.floor(Math.random() * 100);
-      const demoBio = nFollowers < 20 ? "DM me for fun! 😘🔥" : "Passionate about travel, tech and art.";
-      const avatarNum = Math.floor(Math.random() * 99) + 1;
       const generatedProfile: PublicProfileData = {
-        picture: `https://randomuser.me/api/portraits/women/${avatarNum}.jpg`,
-        username: userInput, // Always use user input
-        followers: nFollowers,
-        posts: nPosts,
-        bio: demoBio,
+        picture: "https://randomuser.me/api/portraits/lego/1.jpg",
+        username: input,
+        followers: followers,
+        posts: posts,
+        bio: bio,
         private: false,
       };
       setProfile(generatedProfile);
@@ -353,6 +438,7 @@ const ProfileGuardScanner: React.FC = () => {
             </CardHeader>
             <CardContent>
               <form className="flex flex-col gap-4" onSubmit={handleScan}>
+                {/*Username / Profile URL */}
                 <Input
                   type="text"
                   value={input}
@@ -362,36 +448,63 @@ const ProfileGuardScanner: React.FC = () => {
                   required
                   disabled={scanning}
                 />
-                <Button 
-                  type="submit" 
-                  className="mt-2 bg-veritas-purple hover:bg-veritas-darkPurple"
-                  disabled={scanning || !input}
-                >
-                  {scanning ? "Scanning..." : "Scan Profile"}
-                </Button>
-                {/* Reset/Start Over */}
-                {!scanning && (profile || result || input) && (
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    className="w-full mt-1 text-veritas-purple"
-                    onClick={resetAll}
-                  >
-                    Clear
-                  </Button>
-                )}
-                {(profile || result) && !scanning && (
-                  <Button
-                    variant="outline"
-                    type="button"
-                    className="w-full mt-1"
-                    onClick={resetAll}
-                    disabled={scanning}
-                  >
-                    Start New Scan
-                  </Button>
-                )}
-              </form>
+
+
+
+
+{/* Followers */}
+<div className="flex flex-col gap-1">
+  <label className="text-sm font-medium text-gray-700">
+    Followers count (optional)
+  </label>
+  <input
+    type="text"
+    placeholder="e.g. 1200"
+    value={followers}
+    onChange={(e) => setFollowers(Number(e.target.value))}
+    disabled={scanning}
+    className="bg-veritas-lightPurple/50 border border-veritas-purple/30 rounded-md px-3 py-2"
+  />
+  <p className="text-xs text-gray-500">
+    Helps detect fake engagement patterns
+  </p>
+</div>
+
+{/* Posts */}
+<div className="flex flex-col gap-1">
+  <label className="text-sm font-medium text-gray-700">
+    Posts count (optional)
+  </label>
+  <input
+    type="text"
+    placeholder="e.g. 45"
+    value={posts}
+    onChange={(e) => setPosts(Number(e.target.value))}
+    disabled={scanning}
+    className="bg-veritas-lightPurple/50 border border-veritas-purple/30 rounded-md px-3 py-2"
+  />
+</div>
+
+{/* Bio */}
+<textarea
+  placeholder="Profile bio"
+  value={bio}
+  onChange={(e) => setBio(e.target.value)}
+  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+  disabled={scanning}
+/>
+
+<Button
+  type="submit"
+  className="mt-2 bg-veritas-purple hover:bg-veritas-darkPurple"
+  disabled={scanning}
+>
+  {scanning ? "Scanning..." : "Scan Profile"}
+</Button>
+
+</form>
+
+
             </CardContent>
           </Card>
         </div>
