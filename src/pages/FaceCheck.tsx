@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Navigation from '../components/Navigation';
 import Footer from '../components/Footer';
 import { useToast } from '@/components/ui/use-toast';
+import { useDeepfakeDetector } from '@/hooks/useDeepfakeDetector';
 import { Button } from '@/components/ui/button';
 import { Upload, AlertCircle, CheckCircle, Loader2, Image, Info, Shield, Share2, Camera, Eye, Zap } from 'lucide-react';
 import { supabase } from "@/integrations/supabase/client";
@@ -13,12 +14,11 @@ import { cn } from '@/lib/utils';
 const FaceCheck = () => {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<string | null>(null);
+  const { isAnalyzing, result: analysisResult, error: detectorError, analyze } = useDeepfakeDetector();
+  const [analysisText, setAnalysisText] = useState<string | null>(null);
   const [riskLevel, setRiskLevel] = useState<'low' | 'medium' | 'high' | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [isFallback, setIsFallback] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const { toast } = useToast();
   const [previousAnalyses, setPreviousAnalyses] = useState<any[]>([]);
@@ -171,9 +171,8 @@ const FaceCheck = () => {
   const handleRetry = () => {
     if (selectedImage) {
       setErrorMessage(null);
-      setAnalysisResult(null);
+      setAnalysisText(null);
       setRiskLevel(null);
-      setIsFallback(false);
       setIsRealImage(null);
       setAccuracyPercentage(null);
       handleAnalyze();
@@ -183,226 +182,137 @@ const FaceCheck = () => {
   const handleClear = () => {
     setSelectedImage(null);
     setPreviewUrl(null);
-    setIsAnalyzing(false);
-    setAnalysisResult(null);
+    setAnalysisText(null);
     setRiskLevel(null);
     setErrorMessage(null);
     setUploadProgress(0);
-    setIsFallback(false);
     setIsRealImage(null);
     setAccuracyPercentage(null);
     setStatusMessage(null);
   };
 
   const handleAnalyze = async () => {
-    if (!selectedImage) return;
+    if (!selectedImage || !previewUrl) return;
 
-    setIsAnalyzing(true);
-    setStatusMessage("Analyzing image...");
+    setStatusMessage("Analyzing image for deepfake detection...");
     setErrorMessage(null);
-    setAnalysisResult(null);
+    setAnalysisText(null);
     setRiskLevel(null);
-    setIsFallback(false);
     setIsRealImage(null);
     setAccuracyPercentage(null);
 
     try {
-      console.log("Starting image analysis process");
-      toast({
-        title: "Starting analysis",
-        description: "Uploading and preparing your image...",
-      });
-      
+      console.log('🚀 Starting analysis with image:', selectedImage.name);
+
+      // Simulate progress
       const progressInterval = setInterval(() => {
         setUploadProgress(prev => {
-          const increment = prev < 30 ? 5 : prev < 60 ? 3 : prev < 80 ? 2 : 1;
-          if (prev >= 90) {
+          const increment = prev < 50 ? 10 : prev < 80 ? 5 : 2;
+          if (prev >= 95) {
             clearInterval(progressInterval);
             return prev;
           }
-          return Math.min(prev + increment, 90);
+          return Math.min(prev + increment, 95);
         });
-      }, 250);
-      
-      // Ensure bucket exists before upload
-      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-      if (!bucketsError) {
-        const profileBucket = buckets?.find(bucket => bucket.name === 'profile-images');
-        if (!profileBucket) {
-          console.log("profile-images bucket doesn't exist, attempting to create...");
-          // Note: Regular users can't create buckets, but the function will handle this
-          // We'll just try the upload and let the function create it if needed
-        }
-      }
-      
-      const fileName = `analysis-${Date.now()}-${selectedImage.name.replace(/[^a-zA-Z0-9._-]/g, '')}`;
-      
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('profile-images')
-        .upload(fileName, selectedImage, {
-          cacheControl: '3600',
-          upsert: false
-        });
-      
-      if (uploadError) {
-        console.error("Error uploading to Supabase storage:", uploadError);
-        
-        // If bucket doesn't exist, provide helpful error message
-        if (uploadError.message?.includes('not found') || uploadError.message?.includes('Bucket')) {
-          throw new Error(`Storage bucket not found. Please ensure the 'profile-images' bucket exists in your Supabase project. The function will attempt to create it automatically.`);
-        }
-        
-        throw new Error(`Failed to upload image: ${uploadError.message}`);
-      }
-      
-      console.log("Image uploaded to Supabase storage successfully");
-      
-      const { data: { publicUrl } } = supabase.storage
-        .from('profile-images')
-        .getPublicUrl(fileName);
-      
-      console.log("Image public URL:", publicUrl);
+      }, 150);
+
       toast({
-        title: "Image uploaded",
-        description: "Now analyzing with our AI system...",
+        title: "Starting analysis",
+        description: "Analyzing image with client-side deepfake detection...",
       });
+
+      // Load image from preview
+      const img = new window.Image();
       
-      // Call edge function with direct fetch so we get the real error (CORS, 401, etc.)
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-      const functionUrl = `${supabaseUrl}/functions/v1/facial-recognition`;
-      
-      if (!supabaseUrl || !anonKey) {
-        throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY in .env');
-      }
-      
-      let response: Response;
-      let data: any;
-      try {
-        response = await fetch(functionUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${anonKey}`,
-          },
-          body: JSON.stringify({ imageUrl: publicUrl }),
-        });
-        const text = await response.text();
+      img.onload = async () => {
         try {
-          data = text ? JSON.parse(text) : {};
-        } catch {
-          throw new Error(`Function returned non-JSON (status ${response.status}): ${text.slice(0, 200)}`);
-        }
-      } catch (fetchError: any) {
-        setUploadProgress(100);
-        clearInterval(progressInterval);
-        console.error('Function fetch error:', fetchError);
-        // Network/CORS errors don't have response status
-        const msg = fetchError.message || String(fetchError);
-        if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('CORS')) {
-          throw new Error(
-            'Could not reach the analysis server. Check: (1) Edge function is deployed in Supabase Dashboard, (2) Your .env has correct VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY, (3) No browser extension is blocking the request.'
-          );
-        }
-        throw new Error(`Request failed: ${msg}`);
-      }
-      
-      setUploadProgress(100);
-      clearInterval(progressInterval);
-      
-      if (!response.ok) {
-        console.error('Function error response:', response.status, data);
-        throw new Error(data?.error || `Server error (${response.status}): ${data?.message || response.statusText}`);
-      }
-      
-      console.log("Received facial recognition response:", data);
-      
-      if (data.isFallback) {
-        setIsFallback(true);
-        toast({
-          title: "Using Limited Analysis",
-          description: "Due to high demand, we're providing a limited analysis. Full service will resume shortly.",
-          variant: "default",
-        });
-      }
-      
-      if (data.error) {
-        setErrorMessage(data.error);
-        toast({
-          title: "Analysis issue",
-          description: data.error,
-          variant: "destructive",
-        });
-      }
-      
-      setAnalysisResult(data.analysis);
-      setRiskLevel(data.riskLevel);
-      
-      setIsRealImage(data.riskLevel === 'low');
-      
-      let apiRisk = (data && typeof data.riskLevel === "string" ? data.riskLevel : null) as 'low' | 'medium' | 'high' | null;
-      let confidence = typeof data.confidenceScore === "number" ? data.confidenceScore : null;
+          console.log('✅ Image loaded successfully');
+          setStatusMessage("Running tensor analysis...");
 
-      let displayRisk: 'real' | 'ai' | 'uncertain' | 'likely-real' | 'likely-ai' = 'uncertain';
-      let internalResultString = "";
-      let displayConfidence = confidence;
+          // Perform client-side analysis
+          const result = await analyze(img);
+          console.log('📊 Analysis result:', result);
 
-      if (confidence === null || confidence < 60) {
-        displayRisk = 'uncertain';
-        internalResultString = "Could not determine authenticity.";
-      } else if (confidence >= 60 && confidence < 85) {
-        if (apiRisk === "low") {
-          displayRisk = "likely-real";
-          internalResultString = "Likely a real photo, proceed with care.";
-        } else {
-          displayRisk = "likely-ai";
-          internalResultString = "Possibly AI-generated";
+          setUploadProgress(95);
+          setStatusMessage("Finalizing results...");
+
+          // Format analysis text
+          const analysisDetails = [
+            `Frequency Anomaly Score: ${result.details.frequencyAnomaly}%`,
+            `Compression Artifacts: ${result.details.compressionArtifacts}%`,
+            `Texture Inconsistency: ${result.details.textureInconsistency}%`,
+            `Color Anomalies: ${result.details.colorAnomalies}%`,
+          ].join('\n');
+
+          const resultText = `DEEPFAKE ANALYSIS RESULTS\n\nOverall Risk Level: ${result.riskLevel.toUpperCase()}\nConfidence Score: ${result.confidence}%\n\nANALYSIS BREAKDOWN:\n${analysisDetails}\n\nCONCLUSION:\n${
+            result.riskLevel === 'low'
+              ? '✓ This image appears to be AUTHENTIC. It shows natural characteristics consistent with genuine photographs.'
+              : result.riskLevel === 'medium'
+              ? '⚠ Analysis is INCONCLUSIVE. Some characteristics suggest potential modification. Use additional verification methods.'
+              : '⚠ LIKELY AI-GENERATED OR DEEPFAKE. This image shows strong characteristics of being artificially generated or manipulated.'
+          }`;
+
+          setUploadProgress(100);
+          setStatusMessage(null);
+          setAnalysisText(resultText);
+          setRiskLevel(result.riskLevel);
+          setIsRealImage(result.riskLevel === 'low');
+          setAccuracyPercentage(result.confidence);
+
+          // Show result toast
+          if (result.riskLevel === 'low') {
+            toast({
+              title: "✓ Authentic Image",
+              description: `This image appears genuine with ${result.confidence}% confidence`,
+            });
+          } else if (result.riskLevel === 'medium') {
+            toast({
+              title: "⚠ Inconclusive Results",
+              description: `Analysis shows ${result.confidence}% confidence of manipulation`,
+            });
+          } else {
+            toast({
+              title: "⚠ AI/Deepfake Detected",
+              description: `${result.confidence}% confidence this is AI-generated`,
+            });
+          }
+
+          // Save to local history
+          const newAnalysis = {
+            id: `local-${Date.now()}`,
+            image_url: previewUrl,
+            risk_level: result.riskLevel,
+            analysis: resultText,
+            created_at: new Date().toISOString(),
+          };
+          setPreviousAnalyses(prev => [newAnalysis, ...prev.slice(0, 4)]);
+
+          clearInterval(progressInterval);
+        } catch (err: any) {
+          clearInterval(progressInterval);
+          console.error('❌ Error in image onload callback:', err);
+          throw err;
         }
-      } else if (confidence >= 85) {
-        if (apiRisk === "low") {
-          displayRisk = "real";
-          internalResultString = "This appears to be a genuine photograph of a real person.";
-        } else if (apiRisk === "high") {
-          displayRisk = "ai";
-          internalResultString = "This image shows strong signs of being AI-generated.";
-        } else {
-          displayRisk = "likely-ai";
-          internalResultString = "Possibly AI-generated";
-        }
-      }
-
-      setStatusMessage(null);
-      setAnalysisResult(internalResultString);
-      setRiskLevel(
-        displayRisk === "real" ? "low" :
-        displayRisk === "ai" ? "high" :
-        displayRisk === "likely-ai" ? "medium" :
-        displayRisk === "likely-real" ? "low" :
-        null
-      );
-      setIsRealImage(displayRisk === "real" || displayRisk === "likely-real");
-      setAccuracyPercentage(displayConfidence ?? 0);
-
-      const newAnalysis = {
-        id: `temp-${Date.now()}`,
-        image_url: publicUrl,
-        risk_level: data.riskLevel,
-        analysis: data.analysis,
-        created_at: new Date().toISOString()
       };
-      
-      setPreviousAnalyses(prev => [newAnalysis, ...prev.slice(0, 4)]);
-      
+
+      img.onerror = () => {
+        clearInterval(progressInterval);
+        console.error('❌ Failed to load image');
+        throw new Error('Failed to load image for analysis');
+      };
+
+      console.log('🔗 Setting image source from preview:', previewUrl);
+      img.src = previewUrl;
     } catch (error: any) {
       console.error('Error analyzing image:', error);
-      setErrorMessage(error.message || "There was an error analyzing the image");
+      setErrorMessage(error.message || detectorError || 'There was an error analyzing the image');
       toast({
-        title: "Analysis failed",
-        description: error.message || "There was an error analyzing the image. Please try again.",
-        variant: "destructive",
+        title: 'Analysis failed',
+        description: error.message || detectorError || 'There was an error analyzing the image. Please try again.',
+        variant: 'destructive',
       });
     } finally {
-      setIsAnalyzing(false);
+      setUploadProgress(0);
     }
   };
 
@@ -433,24 +343,24 @@ const FaceCheck = () => {
     
     if (riskLevel === 'low') {
       return {
-        title: "Authentic Image Detected",
-        message: "This appears to be a genuine photograph of a real person.",
+        title: "Authentic Image Detected ✓",
+        message: "This image passes deepfake detection and appears to be a genuine photograph. The analysis shows natural characteristics consistent with authentic photos.",
         color: "text-green-600",
         bgColor: "bg-green-50",
         borderColor: "border-green-200"
       };
     } else if (riskLevel === 'medium') {
       return {
-        title: "Suspicious Elements Detected",
-        message: "This image has some characteristics that could indicate AI generation.",
+        title: "Inconclusive Analysis ⚠",
+        message: "This image shows some characteristics that could indicate manipulation or AI generation. Exercise caution and use additional verification methods.",
         color: "text-amber-600",
         bgColor: "bg-amber-50",
         borderColor: "border-amber-200"
       };
     } else {
       return {
-        title: "AI-Generated Image Detected",
-        message: "This image shows strong signs of being AI-generated.",
+        title: "AI/Deepfake Indicators Detected",
+        message: "This image shows strong signs of being AI-generated or heavily manipulated. We recommend treating it as potentially untrustworthy.",
         color: "text-red-600",
         bgColor: "bg-red-50",
         borderColor: "border-red-200"
@@ -626,19 +536,8 @@ const FaceCheck = () => {
                   </Alert>
                 )}
 
-                {/* Fallback Notice */}
-                {isFallback && (
-                  <Alert className="mt-6 border-amber-200 bg-amber-50">
-                    <Info className="h-4 w-4 text-amber-600" />
-                    <AlertTitle className="text-amber-800">Limited Analysis Mode</AlertTitle>
-                    <AlertDescription className="text-amber-700">
-                      Due to high demand, we're providing a basic analysis. Full service will resume shortly.
-                    </AlertDescription>
-                  </Alert>
-                )}
-
                 {/* Results Section */}
-                {analysisResult && riskLevel && (
+                {analysisText && riskLevel && (
                   <div className="mt-6">
                     {(() => {
                       const result = getResultMessage();
