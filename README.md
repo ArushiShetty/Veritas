@@ -1,73 +1,173 @@
-# Welcome to your Lovable project
+# VERITAS — Digital Safety & Authenticity Platform
 
-## Project info
+VERITAS is a full-stack digital security platform designed to detect manipulated media, analyze suspicious online identities, and help users verify digital authenticity. It combines machine learning, rule-based detection, and secure storage systems to provide real-time safety insights through a clean and accessible interface.
 
-**URL**: https://lovable.dev/projects/e77e7ea1-42ad-4629-abb1-89853942257f
+---
 
-## How can I edit this code?
+## Overview
 
-There are several ways of editing your application.
+As digital threats such as deepfakes, impersonation accounts, and misinformation increase, verifying authenticity has become critical. VERITAS addresses this challenge by integrating automated detection tools, profile analysis modules, encrypted evidence storage, and reporting systems into a single platform.
 
-**Use Lovable**
+The system is modular, scalable, and privacy-focused, making it suitable for individuals, researchers, and organizations.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/e77e7ea1-42ad-4629-abb1-89853942257f) and start prompting.
+---
 
-Changes made via Lovable will be committed automatically to this repo.
+## Features
 
-**Use your preferred IDE**
+### Deepfake Detection
+- Upload images for analysis
+- Machine learning-based prediction
+- Confidence score output
+- Manipulation warning indicators
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+---
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### ProfileGuard Scanner
+Analyzes online profiles for suspicious behavior signals:
 
-Follow these steps:
+- Username anomalies  
+- Follower/following imbalance  
+- Suspicious keywords in bio  
+- Activity pattern irregularities  
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+---
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### Secure Evidence Vault
+- Encrypted file storage  
+- SHA-256 timestamp hashing  
+- Tamper-proof verification  
 
-# Step 3: Install the necessary dependencies.
-npm i
+---
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+### Anonymous Reporting System
+- Submit reports without identity disclosure  
+- Attach supporting evidence  
+- Structured incident logging  
+
+---
+
+### Safety Analyzer
+- Detects threatening or harmful text
+- Flags risk patterns
+- Suggests safety precautions
+
+---
+
+### Safety Assistance Module
+- Emergency guidance
+- Quick helpline access
+- Safety awareness resources
+
+---
+
+## Tech Stack
+
+**Frontend**
+- React
+- TypeScript
+- Tailwind CSS
+- Component-based architecture
+
+**Backend**
+- Python
+- Flask API
+- OCR + image processing modules
+
+**Security & Processing**
+- SHA-256 hashing
+- Secure file handling
+- Rule-based + ML detection logic
+
+---
+
+## Installation
+
+### Clone repository
+```bash
+git clone <YOUR_REPO_URL>
+cd veritas
+```
+
+---
+
+### Backend Setup
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+python app.py
+```
+
+---
+
+### Frontend Setup
+```bash
+cd frontend
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+---
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Project Structure
 
-**Use GitHub Codespaces**
+```
+veritas/
+│
+├── backend/
+│   ├── app.py
+│   ├── models/
+│   ├── utils/
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── components/
+│   ├── pages/
+│   ├── hooks/
+│   └── assets/
+│
+└── README.md
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+---
 
-## What technologies are used for this project?
+## Design Principles
 
-This project is built with:
+VERITAS was developed with three priorities:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- **Accuracy** — reliable detection systems  
+- **Privacy** — secure handling of user data  
+- **Accessibility** — simple interface usable by anyone  
 
-## How can I deploy this project?
+---
 
-Simply open [Lovable](https://lovable.dev/projects/e77e7ea1-42ad-4629-abb1-89853942257f) and click on Share -> Publish.
+## Use Cases
 
-## Can I connect a custom domain to my Lovable project?
+- Verifying suspicious media
+- Detecting impersonation profiles
+- Securing digital evidence
+- Supporting online safety awareness
+- Monitoring digital threats
 
-Yes, you can!
+---
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## Future Enhancements
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+Planned improvements:
+
+- Real-time video deepfake detection
+- Browser extension integration
+- AI-driven threat prediction
+- Multi-language support
+- Mobile application support
+
+---
+
+## License
+MIT License
+
+---
+
+## Contributors
+Developed and maintained by the VERITAS Team.
