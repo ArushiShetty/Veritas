@@ -3,7 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import 'https://deno.land/x/xhr@0.1.0/mod.ts';
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
 
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+const GORQ_API_KEY = Deno.env.get('GORQ_API_KEY');
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
@@ -21,8 +21,8 @@ serve(async (req) => {
   try {
     const { message, conversationId, userId } = await req.json();
     
-    if (!openAIApiKey) {
-      throw new Error('OPENAI_API_KEY is not set');
+    if (!GORQ_API_KEY) {
+      throw new Error('GORQ_API_KEY is not set');
     }
 
     if (!supabaseUrl || !supabaseServiceKey) {
@@ -34,18 +34,18 @@ serve(async (req) => {
     
     console.log('Received request:', { conversationId, userId });
     
-    // Call OpenAI API
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Call gorq API (assumed OpenAI-compatible endpoint)
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
+        'Authorization': `Bearer ${GORQ_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'llama-3.1-8b-instant',
         messages: [
-          { 
-            role: 'system', 
+          {
+            role: 'system',
             content: 'You are VERITAS AI, a digital safety assistant specializing in helping women recognize and avoid online scams, harassment, and threats. Provide practical, supportive advice focused on digital safety, privacy protection, and appropriate actions to take when faced with online dangers. Always be empathetic and never blame the victim. When appropriate, suggest resources or steps that can help in emergency situations.'
           },
           { role: 'user', content: message }
@@ -54,7 +54,19 @@ serve(async (req) => {
       }),
     });
 
-    const data = await response.json();
+    // Log the raw response for debugging
+    const raw = await response.text();
+    console.log('Groq API raw response:', raw);
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      throw new Error('Failed to parse Groq API response as JSON: ' + raw);
+    }
+
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      throw new Error('Invalid response from Groq API: ' + raw);
+    }
     const aiResponse = data.choices[0].message.content;
     
     // Save assistant response to database using service role
