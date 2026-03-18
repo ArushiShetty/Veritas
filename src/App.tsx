@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import ProfileGuard from "./pages/ProfileGuard";
-import ProfileGuardScanner from "./pages/ProfileGuardScanner";
+// import ProfileGuardScanner from "./pages/ProfileGuardScanner";
 import ReportSubmission from "./pages/ReportSubmission";
 import Evidence from "./pages/Evidence";
 import Quiz from "./pages/Quiz";
@@ -66,7 +66,7 @@ const App = () => {
             <Route path="/signin" element={!isLoggedIn ? <SignIn /> : <Navigate to="/" />} />
             <Route path="/login" element={!isLoggedIn ? <Login /> : <Navigate to="/" />} />
             <Route path="/" element={<Index />} />
-            <Route path="/profile-guard-scanner" element={<ProfileGuardScanner />} />
+            <Route path="/profile-guard" element={<ProfileGuard />} />
             
             {/* Protected routes - redirect to login if not authenticated */}
             
