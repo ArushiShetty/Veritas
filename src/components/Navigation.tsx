@@ -5,45 +5,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 const Navigation = () => {
+
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
   const navigate = useNavigate();
-  const { toast } = useToast();
-
-  useEffect(() => {
-    // Check current session
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user || null);
-    };
-    
-    getSession();
-    
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setUser(session?.user || null);
-      }
-    );
-    
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const toggleMenu = () => {
-    setIsMenuOpen(!isMenuOpen);
-  };
-  
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    toast({
-      title: "Logged out",
-      description: "You have been successfully logged out.",
-    });
-    navigate('/');
-  };
-
-  // If there's no user, don't render the navigation
-  if (!user) return null;
+  // Always render nav instantly for fast load and CSP safety
+  const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
+  const handleLogout = () => navigate('/');
 
   return (
     <nav className="bg-white shadow-md sticky top-0 z-50">
@@ -67,20 +34,11 @@ const Navigation = () => {
             <Link to="/analyzer" className="text-gray-700 hover:text-veritas-purple transition-colors">Safety Analyzer</Link>
             <Link to="/report" className="text-gray-700 hover:text-veritas-purple transition-colors">Report</Link>
             
-            {user ? (
-              <button 
-                onClick={handleLogout}
-                className="flex items-center text-gray-700 hover:text-veritas-purple transition-colors"
-              >
-                <LogOut className="h-4 w-4 mr-1" />
-                Logout
-              </button>
-            ) : (
-              <Link to="/signin" className="btn-outline text-sm py-1.5 px-3 flex items-center">
-                <LogIn className="h-4 w-4 mr-1" />
-                Sign In
-              </Link>
-            )}
+            {/* Always show Sign In for demo speed; remove auth logic for now */}
+            <Link to="/signin" className="btn-outline text-sm py-1.5 px-3 flex items-center">
+              <LogIn className="h-4 w-4 mr-1" />
+              Sign In
+            </Link>
           </div>
 
           <button 
@@ -121,21 +79,10 @@ const Navigation = () => {
             <Link to="/quiz" className="text-gray-700 hover:text-veritas-purple py-2 transition-colors" onClick={toggleMenu}>Safety Quiz</Link>
             <Link to="/verify" className="text-gray-700 hover:text-veritas-purple py-2 transition-colors" onClick={toggleMenu}>Verify Case</Link>
             
-            {user ? (
-              <button 
-                onClick={() => {
-                  handleLogout();
-                  toggleMenu();
-                }}
-                className="text-gray-700 hover:text-veritas-purple py-2 transition-colors flex items-center"
-              >
-                <LogOut className="h-4 w-4 mr-1" /> Logout
-              </button>
-            ) : (
-              <Link to="/signin" className="btn-outline text-center w-full mt-2" onClick={toggleMenu}>
-                Sign In
-              </Link>
-            )}
+            {/* Always show Sign In for demo speed; remove auth logic for now */}
+            <Link to="/signin" className="btn-outline text-center w-full mt-2" onClick={toggleMenu}>
+              Sign In
+            </Link>
           </div>
         </div>
       )}

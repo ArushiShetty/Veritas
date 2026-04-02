@@ -45,6 +45,7 @@ interface RedFlag {
   explanation: string;
 }
 
+
 interface Helpline {
   name: string;
   number: string;
@@ -225,3 +226,6 @@ const SafetyAnalyzer = () => {
     </main>
   );
 }
+
+export default SafetyAnalyzer;
+

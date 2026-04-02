@@ -63,7 +63,9 @@ const ProfileGuardScanner = () => {
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value, type, checked } = e.target;
+    const target = e.target as HTMLInputElement | HTMLTextAreaElement;
+    const { name, value, type } = target;
+    const checked = (type === 'checkbox' && 'checked' in target) ? (target as HTMLInputElement).checked : undefined;
     setForm((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
@@ -117,7 +119,7 @@ const ProfileGuardScanner = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             {step === 1 && (
               <>
-                <label className="block font-medium mb-1">Profile URL <Info className="inline h-4 w-4 text-gray-400" title="Instagram, Tinder, etc." /></label>
+                <label className="block font-medium mb-1">Profile URL <Info className="inline h-4 w-4 text-gray-400" aria-label="Instagram, Tinder, etc." /></label>
                 <input type="url" name="url" placeholder="Profile URL" className="w-full rounded-lg border px-4 py-2 mb-2" value={form.url} onChange={handleChange} required />
                 <label className="block font-medium mb-1">Profile Image (optional)</label>
                 <input type="file" accept="image/*" onChange={handleImageChange} className="mb-2" />
@@ -153,53 +155,55 @@ const ProfileGuardScanner = () => {
             </div>
           )}
           {result && (
-            <div className="mt-8">
-              <div className="bg-white rounded-xl shadow p-6 flex flex-col items-center">
-                <div className="w-full flex flex-col items-center mb-4">
-                  <span className="text-lg font-semibold mb-1">Fake Score</span>
-                  <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
-                    <div className={`bg-gradient-to-r from-red-400 via-yellow-400 to-green-400 h-4 rounded-full`} style={{ width: `${result.fake_score}%` }} />
+            <>
+              <div className="mt-8">
+                <div className="bg-white rounded-xl shadow p-6 flex flex-col items-center">
+                  <div className="w-full flex flex-col items-center mb-4">
+                    <span className="text-lg font-semibold mb-1">Fake Score</span>
+                    <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
+                      <div className={`bg-gradient-to-r from-red-400 via-yellow-400 to-green-400 h-4 rounded-full`} style={{ width: `${result.fake_score}%` }} />
+                    </div>
+                    <span className="text-2xl font-bold text-veritas-purple">{result.fake_score}%</span>
+                    <div className="flex gap-2 mt-2">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${result.fake_score > 70 ? 'bg-red-100 text-red-700' : result.fake_score > 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                        {result.fake_score > 70 ? 'High Risk' : result.fake_score > 40 ? 'Suspicious' : 'Safe'}
+                      </span>
+                    </div>
                   </div>
-                  <span className="text-2xl font-bold text-veritas-purple">{result.fake_score}%</span>
-                  <div className="flex gap-2 mt-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${result.fake_score > 70 ? 'bg-red-100 text-red-700' : result.fake_score > 40 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
-                      {result.fake_score > 70 ? 'High Risk' : result.fake_score > 40 ? 'Suspicious' : 'Safe'}
-                    </span>
+                  <ul className="text-left w-full mb-2">
+                    {result.reasons && result.reasons.map((r: string, i: number) => (
+                      <li key={i} className="text-gray-700 text-sm flex items-center gap-2 mb-1">- {r}</li>
+                    ))}
+                  </ul>
+                  <div className={`mt-2 text-lg font-bold flex items-center gap-2 ${result.verdict.includes('fake') ? 'text-red-600' : 'text-green-600'}`}>
+                    {result.verdict.includes('fake') ? <AlertTriangle /> : <CheckCircle />} {result.verdict}
                   </div>
-                </div>
-                <ul className="text-left w-full mb-2">
-                  {result.reasons && result.reasons.map((r: string, i: number) => (
-                    <li key={i} className="text-gray-700 text-sm flex items-center gap-2 mb-1">- {r}</li>
-                  ))}
-                </ul>
-                <div className={`mt-2 text-lg font-bold flex items-center gap-2 ${result.verdict.includes('fake') ? 'text-red-600' : 'text-green-600'}`}>
-                  {result.verdict.includes('fake') ? <AlertTriangle /> : <CheckCircle />} {result.verdict}
-                </div>
-                {result.timeline && (
-                  <div className="w-full mt-4">
-                    <h3 className="text-md font-semibold mb-2">Profile Summary</h3>
-                    <ul className="text-sm text-gray-600">
-                      {result.timeline.map((item: any, idx: number) => (
-                        <li key={idx} className="mb-1 flex gap-2 items-center"><Info className="h-4 w-4 text-gray-400" /> <span className="font-medium">{item.label}:</span> {item.value}</li>
-                      ))}
-                    </ul>
+                  {result.timeline && (
+                    <div className="w-full mt-4">
+                      <h3 className="text-md font-semibold mb-2">Profile Summary</h3>
+                      <ul className="text-sm text-gray-600">
+                        {result.timeline.map((item: any, idx: number) => (
+                          <li key={idx} className="mb-1 flex gap-2 items-center"><Info className="h-4 w-4 text-gray-400" aria-label={item.label} /> <span className="font-medium">{item.label}:</span> {item.value}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="flex gap-4 mt-6">
+                    <button className={`flex items-center gap-1 px-3 py-1 rounded-lg border ${feedback === 'correct' ? 'bg-green-100 border-green-300' : 'border-gray-200'}`} onClick={() => setFeedback('correct')}><ThumbsUp className="h-4 w-4" /> Correct</button>
+                    <button className={`flex items-center gap-1 px-3 py-1 rounded-lg border ${feedback === 'incorrect' ? 'bg-red-100 border-red-300' : 'border-gray-200'}`} onClick={() => setFeedback('incorrect')}><ThumbsDown className="h-4 w-4" /> Incorrect</button>
+                    <button className="flex items-center gap-1 px-3 py-1 rounded-lg border border-yellow-200" onClick={() => alert('Reported!')}><Flag className="h-4 w-4 text-yellow-500" /> Report</button>
                   </div>
-                )}
-                <div className="flex gap-4 mt-6">
-                  <button className={`flex items-center gap-1 px-3 py-1 rounded-lg border ${feedback === 'correct' ? 'bg-green-100 border-green-300' : 'border-gray-200'}`} onClick={() => setFeedback('correct')}><ThumbsUp className="h-4 w-4" /> Correct</button>
-                  <button className={`flex items-center gap-1 px-3 py-1 rounded-lg border ${feedback === 'incorrect' ? 'bg-red-100 border-red-300' : 'border-gray-200'}`} onClick={() => setFeedback('incorrect')}><ThumbsDown className="h-4 w-4" /> Incorrect</button>
-                  <button className="flex items-center gap-1 px-3 py-1 rounded-lg border border-yellow-200" onClick={() => alert('Reported!')}><Flag className="h-4 w-4 text-yellow-500" /> Report</button>
                 </div>
               </div>
-            </div>
-            <div className={`mt-8 p-4 rounded-xl ${darkMode ? 'bg-gray-800 text-white' : 'bg-purple-50 text-veritas-purple'}`}>
-              <h3 className="font-bold mb-2">{language === 'en' ? 'Emergency Helplines' : language === 'hi' ? 'आपातकालीन हेल्पलाइन' : 'ತುರ್ತು ಸಹಾಯವಾಣಿ'}</h3>
-              <ul className="text-sm">
-                {EMERGENCY_HELPLINES[language].map((hl, i) => (
-                  <li key={i} className="mb-1">{hl}</li>
-                ))}
-              </ul>
-            </div>
+              <div className={`mt-8 p-4 rounded-xl ${darkMode ? 'bg-gray-800 text-white' : 'bg-purple-50 text-veritas-purple'}`}>
+                <h3 className="font-bold mb-2">{language === 'en' ? 'Emergency Helplines' : language === 'hi' ? 'आपातकालीन हेल्पलाइन' : 'ತುರ್ತು ಸಹಾಯವಾಣಿ'}</h3>
+                <ul className="text-sm">
+                  {EMERGENCY_HELPLINES[language].map((hl, i) => (
+                    <li key={i} className="mb-1">{hl}</li>
+                  ))}
+                </ul>
+              </div>
+            </>
           )}
         </div>
       </main>

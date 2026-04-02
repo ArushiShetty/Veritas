@@ -19,10 +19,8 @@ import SignIn from "./pages/SignIn";
 import SafetyAnalyzer from "./pages/SafetyAnalyzer";
 import VoiceAssistant from "./pages/VoiceAssistant";
 import { useEffect, useState, createContext } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
 const queryClient = new QueryClient();
-
 
 // Language and Theme Context
 export const VeritasUIContext = createContext({
@@ -39,8 +37,6 @@ const LANGUAGES = [
 ];
 
 const App = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
   const [language, setLanguage] = useState(() => localStorage.getItem('veritas-lang') || 'en');
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('veritas-dark') === 'true');
   // Persist language and theme
@@ -55,34 +51,6 @@ const App = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [darkMode]);
-
-  useEffect(() => {
-    // Check current session
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log("Current session:", session);
-      setIsLoggedIn(!!session);
-      setUserId(session?.user?.id || null);
-    };
-    
-    getSession();
-    
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log("Auth state changed:", event, session?.user?.id);
-        setIsLoggedIn(!!session);
-        setUserId(session?.user?.id || null);
-      }
-    );
-    
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Show loading state while checking authentication
-  if (isLoggedIn === null) {
-    return <div className="h-screen w-screen flex items-center justify-center">Loading...</div>;
-  }
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -111,21 +79,19 @@ const App = () => {
             <Sonner />
             <BrowserRouter>
               <Routes>
-                {/* Public routes */}
-                <Route path="/signin" element={!isLoggedIn ? <SignIn /> : <Navigate to="/" />} />
-                <Route path="/login" element={!isLoggedIn ? <Login /> : <Navigate to="/" />} />
+                <Route path="/signin" element={<SignIn />} />
+                <Route path="/login" element={<Login />} />
                 <Route path="/" element={<Index />} />
                 <Route path="/profile-guard" element={<ProfileGuard />} />
-                {/* Protected routes - redirect to login if not authenticated */}
-                <Route path="/report" element={isLoggedIn ? <ReportSubmission /> : <Navigate to="/signin" />} />
-                <Route path="/evidence" element={isLoggedIn ? <Evidence /> : <Navigate to="/signin" />} />
-                <Route path="/quiz" element={isLoggedIn ? <Quiz /> : <Navigate to="/signin" />} />
-                <Route path="/verify" element={isLoggedIn ? <Verify /> : <Navigate to="/signin" />} />
-                <Route path="/chatbot" element={isLoggedIn ? <Chatbot /> : <Navigate to="/signin" />} />
-                <Route path="/face-check" element={isLoggedIn ? <FaceCheck /> : <Navigate to="/signin" />} />
-                <Route path="/vault" element={isLoggedIn ? <EmergencyVault /> : <Navigate to="/signin" />} />
-                <Route path="/analyzer" element={isLoggedIn ? <SafetyAnalyzer /> : <Navigate to="/signin" />} />
-                <Route path="/voice-assistant" element={isLoggedIn ? <VoiceAssistant /> : <Navigate to="/signin" />} />
+                <Route path="/report" element={<ReportSubmission />} />
+                <Route path="/evidence" element={<Evidence />} />
+                <Route path="/quiz" element={<Quiz />} />
+                <Route path="/verify" element={<Verify />} />
+                <Route path="/chatbot" element={<Chatbot />} />
+                <Route path="/face-check" element={<FaceCheck />} />
+                <Route path="/vault" element={<EmergencyVault />} />
+                <Route path="/analyzer" element={<SafetyAnalyzer />} />
+                <Route path="/voice-assistant" element={<VoiceAssistant />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
