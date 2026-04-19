@@ -1,11 +1,14 @@
 
 import React from 'react';
+import { useContext } from 'react';
+import { VeritasUIContext } from '../App';
 import { Link } from 'react-router-dom';
 import { Shield, Github, Heart } from 'lucide-react';
 
 const Footer = () => {
+  const { darkMode } = useContext(VeritasUIContext);
   return (
-    <footer className="bg-white border-t border-gray-200 pt-10 pb-6">
+    <footer className={darkMode ? "bg-gray-900 py-6 mt-12 border-t border-gray-700" : "bg-white border-t border-gray-200 pt-10 pb-6"}>
       <div className="container mx-auto px-4 md:px-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
           <div>
@@ -103,7 +106,7 @@ const Footer = () => {
         </div>
 
         <div className="border-t border-gray-200 pt-6 flex flex-col md:flex-row justify-between items-center">
-          <p className="text-gray-500 text-sm mb-4 md:mb-0">
+          <p className={darkMode ? "text-gray-400 text-sm mb-4 md:mb-0" : "text-gray-500 text-sm mb-4 md:mb-0"}>
             &copy; {new Date().getFullYear()} VERITAS. All rights reserved.
           </p>
           <div className="flex items-center text-gray-500 text-sm">
