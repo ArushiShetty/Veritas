@@ -1,14 +1,89 @@
-import React, { useState, useContext } from 'react';
+
+import React, { useState, useContext, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, Menu, X, MessageCircle, Users, Lock, LogOut, LogIn, AlertTriangle, Mic } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { VeritasUIContext } from '../App';
+
+
+const translations = {
+  en: {
+    home: 'Home',
+    profileGuard: 'ProfileGuard',
+    safetyAssistant: 'Safety Assistant',
+    voice: 'Voice',
+    imageCheck: 'Image Check',
+    secureVault: 'Secure Vault',
+    safetyAnalyzer: 'Safety Analyzer',
+    report: 'Report',
+    evidence: 'Evidence',
+    quiz: 'Safety Quiz',
+    verify: 'Verify Case',
+    signIn: 'Sign In',
+    signOut: 'Sign Out',
+    welcome: 'Welcome',
+  },
+  hi: {
+    home: 'होम',
+    profileGuard: 'प्रोफाइल गार्ड',
+    safetyAssistant: 'सुरक्षा सहायक',
+    voice: 'आवाज़',
+    imageCheck: 'इमेज जांच',
+    secureVault: 'सुरक्षित वॉल्ट',
+    safetyAnalyzer: 'सुरक्षा विश्लेषक',
+    report: 'रिपोर्ट',
+    evidence: 'सबूत',
+    quiz: 'सुरक्षा क्विज़',
+    verify: 'मामला सत्यापित करें',
+    signIn: 'साइन इन',
+    signOut: 'साइन आउट',
+    welcome: 'स्वागत है',
+  },
+  kn: {
+    home: 'ಮುಖಪುಟ',
+    profileGuard: 'ಪ್ರೊಫೈಲ್ ಗಾರ್ಡ್',
+    safetyAssistant: 'ಭದ್ರತಾ ಸಹಾಯಕ',
+    voice: 'ಧ್ವನಿ',
+    imageCheck: 'ಚಿತ್ರ ಪರಿಶೀಲನೆ',
+    secureVault: 'ಸುರಕ್ಷಿತ ವಾಲ್ಟ್',
+    safetyAnalyzer: 'ಭದ್ರತಾ ವಿಶ್ಲೇಷಕ',
+    report: 'ವರದಿ',
+    evidence: 'ಸಾಕ್ಷ್ಯ',
+    quiz: 'ಭದ್ರತಾ ಪ್ರಶ್ನೋತ್ತರ',
+    verify: 'ಕೇಸ್ ಪರಿಶೀಲಿಸಿ',
+    signIn: 'ಸೈನ್ ಇನ್',
+    signOut: 'ಸೈನ್ ಔಟ್',
+    welcome: 'ಸ್ವಾಗತ',
+  },
+};
 
 const Navigation = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const navigate = useNavigate();
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
-  const handleLogout = () => navigate('/');
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    navigate('/');
+  };
+  const { language } = useContext(VeritasUIContext);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      setUser(data.user);
+    };
+    fetchUser();
+    // Listen for auth changes
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+    return () => {
+      listener?.subscription.unsubscribe();
+    };
+  }, []);
 
   return (
     <nav className="shadow-md sticky top-0 z-50 bg-white dark:bg-gray-900">
@@ -20,23 +95,35 @@ const Navigation = () => {
               <span className="text-xl font-bold text-veritas-purple">VERITAS</span>
             </Link>
             <div className="hidden md:flex gap-4 items-center">
-              <Link to="/" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">Home</Link>
-              <Link to="/profile-guard" className="bg-gradient-to-r from-veritas-purple to-purple-400 text-white px-3 py-1.5 rounded shadow font-semibold hover:from-purple-600 hover:to-veritas-purple transition-colors border-2 border-veritas-purple">ProfileGuard</Link>
-              <Link to="/chatbot" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">Safety Assistant</Link>
+              <Link to="/" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">{translations[language].home}</Link>
+              <Link to="/profile-guard" className="bg-gradient-to-r from-veritas-purple to-purple-400 text-white px-3 py-1.5 rounded shadow font-semibold hover:from-purple-600 hover:to-veritas-purple transition-colors border-2 border-veritas-purple">{translations[language].profileGuard}</Link>
+              <Link to="/chatbot" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">{translations[language].safetyAssistant}</Link>
               <Link to="/voice-assistant" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors flex items-center gap-1 font-medium">
-                <Mic className="h-4 w-4" /> Voice
+                <Mic className="h-4 w-4" /> {translations[language].voice}
               </Link>
-              <Link to="/face-check" className="bg-gradient-to-r from-veritas-purple to-purple-400 text-white px-3 py-1.5 rounded shadow font-semibold hover:from-purple-600 hover:to-veritas-purple transition-colors border-2 border-veritas-purple">Image Check</Link>
-              <Link to="/vault" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">Secure Vault</Link>
-              <Link to="/analyzer" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">Safety Analyzer</Link>
-              <Link to="/report" className="bg-gradient-to-r from-veritas-purple to-purple-400 text-white px-3 py-1.5 rounded shadow font-semibold hover:from-purple-600 hover:to-veritas-purple transition-colors border-2 border-veritas-purple">Report</Link>
-              <Link to="/evidence" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">Evidence</Link>
-              <Link to="/quiz" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">Safety Quiz</Link>
-              <Link to="/verify" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">Verify Case</Link>
-              <Link to="/signin" className="btn-outline text-sm py-1.5 px-3 flex items-center">
-                <LogIn className="h-4 w-4 mr-1" />
-                Sign In
-              </Link>
+              <Link to="/face-check" className="bg-gradient-to-r from-veritas-purple to-purple-400 text-white px-3 py-1.5 rounded shadow font-semibold hover:from-purple-600 hover:to-veritas-purple transition-colors border-2 border-veritas-purple">{translations[language].imageCheck}</Link>
+              <Link to="/vault" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">{translations[language].secureVault}</Link>
+              <Link to="/analyzer" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">{translations[language].safetyAnalyzer}</Link>
+              <Link to="/report" className="bg-gradient-to-r from-veritas-purple to-purple-400 text-white px-3 py-1.5 rounded shadow font-semibold hover:from-purple-600 hover:to-veritas-purple transition-colors border-2 border-veritas-purple">{translations[language].report}</Link>
+              <Link to="/evidence" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">{translations[language].evidence}</Link>
+              <Link to="/quiz" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">{translations[language].quiz}</Link>
+              <Link to="/verify" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">{translations[language].verify}</Link>
+              {user ? (
+                <>
+                  <span className="ml-4 font-medium text-veritas-purple">
+                    {translations[language].welcome} {user.user_metadata?.name || user.email}
+                  </span>
+                  <button onClick={handleLogout} className="ml-2 btn-outline text-sm py-1.5 px-3 flex items-center">
+                    <LogOut className="h-4 w-4 mr-1" />
+                    {translations[language].signOut}
+                  </button>
+                </>
+              ) : (
+                <Link to="/signin" className="btn-outline text-sm py-1.5 px-3 flex items-center">
+                  <LogIn className="h-4 w-4 mr-1" />
+                  {translations[language].signIn}
+                </Link>
+              )}
             </div>
           </div>
           <button
