@@ -1,0 +1,86 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 258 43% 98%;
+    --foreground: 256 22% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 256 22% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 256 22% 12%;
+
+    --primary: 255 35% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 199 93% 48%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 257 23% 94%;
+    --muted-foreground: 257 8% 47%;
+
+    --accent: 257 23% 94%;
+    --accent-foreground: 256 22% 12%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 257 23% 85%;
+    --input: 257 23% 85%;
+    --ring: 255 35% 50%;
+
+    --radius: 0.75rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-poppins;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-roboto font-bold;
+  }
+}
+
+@layer components {
+  .veritas-container {
+    @apply container mx-auto px-4 md:px-6 py-8;
+  }
+
+  .page-title {
+    @apply text-3xl md:text-4xl font-bold text-veritas-purple mb-4 text-center;
+  }
+
+  .section-title {
+    @apply text-2xl md:text-3xl font-bold text-veritas-purple mb-4;
+  }
+
+  .btn-primary {
+    @apply bg-veritas-purple hover:bg-veritas-darkPurple text-white font-medium py-2 px-4 rounded-lg transition duration-300 ease-in-out shadow-md hover:shadow-lg;
+  }
+
+  .btn-secondary {
+    @apply bg-veritas-blue hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition duration-300 ease-in-out shadow-md hover:shadow-lg;
+  }
+
+  .btn-outline {
+    @apply border border-veritas-purple text-veritas-purple hover:bg-veritas-lightPurple font-medium py-2 px-4 rounded-lg transition duration-300 ease-in-out;
+  }
+
+  .card {
+    @apply bg-white rounded-xl shadow-md hover:shadow-lg transition duration-300 ease-in-out border border-gray-100 p-6;
+  }
+  
+  .security-element {
+    @apply animate-pulse-slow;
+  }
+}
