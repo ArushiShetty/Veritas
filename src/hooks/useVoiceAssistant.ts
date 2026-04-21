@@ -57,18 +57,6 @@ export const useVoiceAssistant = () => {
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
 
-  const detectSpeechLanguage = (text: string): SupportedLanguage => {
-    // Devanagari block -> Hindi
-    if (/[\u0900-\u097F]/.test(text)) {
-      return 'hi-IN';
-    }
-    // Kannada block -> Kannada
-    if (/[\u0C80-\u0CFF]/.test(text)) {
-      return 'kn-IN';
-    }
-    return 'en-US';
-  };
-
   // Initialize speech recognition
   useEffect(() => {
     if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
@@ -183,8 +171,8 @@ export const useVoiceAssistant = () => {
     utterance.rate = 0.9;
     utterance.pitch = 1;
     utterance.volume = 1;
-    const detectedLanguage = detectSpeechLanguage(text);
-    utterance.lang = detectedLanguage;
+    const targetLanguage: SupportedLanguage = language;
+    utterance.lang = targetLanguage;
 
     // Set event handlers BEFORE speaking
     utterance.onstart = () => {
@@ -224,14 +212,10 @@ export const useVoiceAssistant = () => {
     }
 
     let foundVoice: SpeechSynthesisVoice | undefined;
-    if (detectedLanguage === 'kn-IN') {
-      foundVoice =
-        voices.find((v) => v.lang === 'kn-IN') ||
-        voices.find((v) => v.lang.toLowerCase().startsWith('kn'));
-    } else if (detectedLanguage === 'hi-IN') {
-      foundVoice =
-        voices.find((v) => v.lang === 'hi-IN') ||
-        voices.find((v) => v.lang.toLowerCase().startsWith('hi'));
+    if (targetLanguage === 'kn-IN') {
+      foundVoice = voices.find((v) => v.lang === 'kn-IN');
+    } else if (targetLanguage === 'hi-IN') {
+      foundVoice = voices.find((v) => v.lang === 'hi-IN');
     } else {
       foundVoice =
         voices.find((v) => v.lang === 'en-US') ||
@@ -241,12 +225,12 @@ export const useVoiceAssistant = () => {
     if (foundVoice) {
       utterance.voice = foundVoice;
     }
-    // Force selected language for full utterance (including English words like "Veritas").
-    utterance.lang = detectedLanguage;
+    // Force selected language pack even without an exact voice match.
+    utterance.lang = targetLanguage;
 
     setIsSpeaking(true);
     window.speechSynthesis.speak(utterance);
-  }, [toast]);
+  }, [toast, language]);
 
   const stopSpeaking = useCallback(() => {
     window.speechSynthesis.cancel();
