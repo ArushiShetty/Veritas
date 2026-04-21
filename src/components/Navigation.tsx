@@ -1,10 +1,30 @@
 
+
 import React, { useState, useContext, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, Menu, X, MessageCircle, Users, Lock, LogOut, LogIn, AlertTriangle, Mic } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { VeritasUIContext } from '../App';
+
+// Helper to fetch and show profile name
+function ProfileName({ user }) {
+  const [name, setName] = useState(user.user_metadata?.name || '');
+  useEffect(() => {
+    let ignore = false;
+    async function fetchName() {
+      const { data } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('user_id', user.id)
+        .single();
+      if (!ignore && data && data.name) setName(data.name);
+    }
+    fetchName();
+    return () => { ignore = true; };
+  }, [user.id]);
+  return <span>{name || user.user_metadata?.name || user.email}</span>;
+}
 
 
 const translations = {
@@ -110,9 +130,9 @@ const Navigation = () => {
               <Link to="/verify" className="text-gray-700 dark:text-gray-200 hover:text-veritas-purple transition-colors font-medium">{translations[language].verify}</Link>
               {user ? (
                 <>
-                  <span className="ml-4 font-medium text-veritas-purple">
-                    {translations[language].welcome} {user.user_metadata?.name || user.email}
-                  </span>
+                  <Link to="/profile" className="ml-4 font-medium text-veritas-purple underline">
+                    {translations[language].welcome} <ProfileName user={user} />
+                  </Link>
                   <button onClick={handleLogout} className="ml-2 btn-outline text-sm py-1.5 px-3 flex items-center">
                     <LogOut className="h-4 w-4 mr-1" />
                     {translations[language].signOut}

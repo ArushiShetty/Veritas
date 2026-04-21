@@ -15,6 +15,7 @@ interface AuthState {
   password: string;
   isSignUp: boolean;
   confirmPassword: string;
+  name: string;
 }
 
 const Login = () => {
@@ -25,6 +26,7 @@ const Login = () => {
     password: '',
     isSignUp: false,
     confirmPassword: '',
+    name: '',
   });
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -90,15 +92,24 @@ const Login = () => {
           return;
         }
 
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: state.email,
           password: state.password,
           options: {
             emailRedirectTo: `${window.location.origin}/`,
+            data: { name: state.name },
           },
         });
 
         if (error) throw error;
+
+        // Store name in profiles table
+        if (data.user) {
+          await supabase.from('profiles').upsert({
+            user_id: data.user.id,
+            name: state.name,
+          }, { onConflict: ['user_id'] });
+        }
 
         toast({
           title: "Success",
@@ -184,6 +195,22 @@ const Login = () => {
           </div>
 
           <form onSubmit={handleAuth} className="space-y-4">
+            {state.isSignUp && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    name="name"
+                    placeholder="Your Name"
+                    value={state.name}
+                    onChange={handleChange}
+                    required
+                    className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-veritas-purple"
+                  />
+                </div>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
               <div className="relative">
@@ -199,7 +226,6 @@ const Login = () => {
                 />
               </div>
             </div>
-            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
               <div className="relative">
@@ -216,7 +242,6 @@ const Login = () => {
                 />
               </div>
             </div>
-            
             {state.isSignUp && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
@@ -234,7 +259,6 @@ const Login = () => {
                 </div>
               </div>
             )}
-            
             <Button
               type="submit"
               disabled={state.isLoading}

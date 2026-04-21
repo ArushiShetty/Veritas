@@ -1,11 +1,112 @@
 
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useContext } from 'react';
 import Navigation from '../components/Navigation';
 import Footer from '../components/Footer';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { File, Upload, Trash2, Lock, Shield, Loader2, FileText } from 'lucide-react';
 import { supabase } from "@/integrations/supabase/client";
+import { VeritasUIContext } from '../App';
+
+const translations = {
+  en: {
+    title: 'Emergency Vault',
+    subtitle: 'Securely store sensitive documents with end-to-end encryption. Your files are protected and only accessible by you.',
+    yourFiles: 'Your Secure Files',
+    uploaded: 'Uploaded',
+    actions: 'Actions',
+    download: 'Download',
+    delete: 'Delete',
+    noFiles: 'No files yet',
+    uploadFirst: 'Upload your first secure file to get started',
+    uploadNew: 'Upload New File',
+    clickToUpload: 'Click to upload',
+    encrypting: 'Encrypting & Uploading...',
+    secureUpload: 'Secure Upload',
+    vaultSecurity: 'Vault Security',
+    e2e: 'End-to-end encryption',
+    onlyYou: 'Files accessible only by you',
+    tamper: 'Tamper-proof storage',
+    legal: 'Legal-grade evidence preservation',
+    success: 'Success',
+    uploadSuccess: 'File securely uploaded to your vault.',
+    uploadFailed: 'Upload failed',
+    uploadError: 'There was an error uploading your file. Please try again.',
+    deleteSuccess: 'File deleted from your vault.',
+    deleteFailed: 'Delete failed',
+    deleteError: 'There was an error deleting your file. Please try again.',
+    downloadFailed: 'Download failed',
+    downloadError: 'There was an error downloading your file. Please try again.',
+    authRequired: 'Authentication required',
+    signInToAccess: 'Please sign in to access your vault files.',
+    loadingFailed: 'Failed to load your vault files.'
+  },
+  hi: {
+    title: 'आपातकालीन वॉल्ट',
+    subtitle: 'संवेदनशील दस्तावेज़ों को एंड-टू-एंड एन्क्रिप्शन के साथ सुरक्षित रूप से स्टोर करें। आपकी फाइलें सुरक्षित हैं और केवल आप ही एक्सेस कर सकते हैं।',
+    yourFiles: 'आपकी सुरक्षित फाइलें',
+    uploaded: 'अपलोड किया गया',
+    actions: 'क्रियाएँ',
+    download: 'डाउनलोड',
+    delete: 'हटाएं',
+    noFiles: 'कोई फाइल नहीं',
+    uploadFirst: 'शुरू करने के लिए अपनी पहली सुरक्षित फाइल अपलोड करें',
+    uploadNew: 'नई फाइल अपलोड करें',
+    clickToUpload: 'अपलोड करने के लिए क्लिक करें',
+    encrypting: 'एन्क्रिप्ट किया जा रहा है और अपलोड हो रहा है...',
+    secureUpload: 'सुरक्षित अपलोड',
+    vaultSecurity: 'वॉल्ट सुरक्षा',
+    e2e: 'एंड-टू-एंड एन्क्रिप्शन',
+    onlyYou: 'फाइलें केवल आपके द्वारा एक्सेस की जा सकती हैं',
+    tamper: 'छेड़छाड़-प्रूफ स्टोरेज',
+    legal: 'कानूनी-ग्रेड साक्ष्य संरक्षण',
+    success: 'सफलता',
+    uploadSuccess: 'फाइल सफलतापूर्वक वॉल्ट में अपलोड हो गई।',
+    uploadFailed: 'अपलोड विफल',
+    uploadError: 'आपकी फाइल अपलोड करने में त्रुटि हुई। कृपया पुनः प्रयास करें।',
+    deleteSuccess: 'फाइल वॉल्ट से हटा दी गई।',
+    deleteFailed: 'हटाना विफल',
+    deleteError: 'आपकी फाइल हटाने में त्रुटि हुई। कृपया पुनः प्रयास करें।',
+    downloadFailed: 'डाउनलोड विफल',
+    downloadError: 'आपकी फाइल डाउनलोड करने में त्रुटि हुई। कृपया पुनः प्रयास करें।',
+    authRequired: 'प्रमाणीकरण आवश्यक',
+    signInToAccess: 'कृपया अपनी वॉल्ट फाइलों तक पहुँचने के लिए साइन इन करें।',
+    loadingFailed: 'आपकी वॉल्ट फाइलें लोड करने में विफल।'
+  },
+  kn: {
+    title: 'ತುರ್ತು ವಾಲ್ಟ್',
+    subtitle: 'ಸೂಕ್ಷ್ಮ ದಾಖಲೆಗಳನ್ನು ಎಂಡ್-ಟು-ಎಂಡ್ ಎನ್ಕ್ರಿಪ್ಷನ್‌ನೊಂದಿಗೆ ಸುರಕ್ಷಿತವಾಗಿ ಸಂಗ್ರಹಿಸಿ. ನಿಮ್ಮ ಫೈಲ್‌ಗಳು ಸುರಕ್ಷಿತವಾಗಿವೆ ಮತ್ತು ನೀವು ಮಾತ್ರ ಪ್ರವೇಶಿಸಬಹುದು.',
+    yourFiles: 'ನಿಮ್ಮ ಸುರಕ್ಷಿತ ಫೈಲ್‌ಗಳು',
+    uploaded: 'ಅಪ್‌ಲೋಡ್ ಮಾಡಲಾಗಿದೆ',
+    actions: 'ಕ್ರಿಯೆಗಳು',
+    download: 'ಡೌನ್‌ಲೋಡ್',
+    delete: 'ಅಳಿಸಿ',
+    noFiles: 'ಯಾವುದೇ ಫೈಲ್‌ಗಳು ಇಲ್ಲ',
+    uploadFirst: 'ಪ್ರಾರಂಭಿಸಲು ನಿಮ್ಮ ಮೊದಲ ಸುರಕ್ಷಿತ ಫೈಲ್ ಅನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ',
+    uploadNew: 'ಹೊಸ ಫೈಲ್ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ',
+    clickToUpload: 'ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಕ್ಲಿಕ್ ಮಾಡಿ',
+    encrypting: 'ಎನ್ಕ್ರಿಪ್ಟ್ ಮಾಡಲಾಗುತ್ತಿದೆ ಮತ್ತು ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ...',
+    secureUpload: 'ಸುರಕ್ಷಿತ ಅಪ್‌ಲೋಡ್',
+    vaultSecurity: 'ವಾಲ್ಟ್ ಭದ್ರತೆ',
+    e2e: 'ಎಂಡ್-ಟು-ಎಂಡ್ ಎನ್ಕ್ರಿಪ್ಷನ್',
+    onlyYou: 'ಫೈಲ್‌ಗಳನ್ನು ನೀವು ಮಾತ್ರ ಪ್ರವೇಶಿಸಬಹುದು',
+    tamper: 'ತಿದ್ದುಪಡಿ-ಪ್ರೂಫ್ ಸಂಗ್ರಹಣೆ',
+    legal: 'ಕಾನೂನು-ಮಟ್ಟದ ಸಾಕ್ಷ್ಯ ಸಂರಕ್ಷಣೆ',
+    success: 'ಯಶಸ್ಸು',
+    uploadSuccess: 'ಫೈಲ್ ಯಶಸ್ವಿಯಾಗಿ ವಾಲ್ಟ್‌ಗೆ ಅಪ್‌ಲೋಡ್ ಮಾಡಲಾಗಿದೆ.',
+    uploadFailed: 'ಅಪ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ',
+    uploadError: 'ನಿಮ್ಮ ಫೈಲ್ ಅಪ್‌ಲೋಡ್ ಮಾಡುವಲ್ಲಿ ದೋಷವಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+    deleteSuccess: 'ಫೈಲ್ ವಾಲ್ಟ್‌ನಿಂದ ಅಳಿಸಲಾಗಿದೆ.',
+    deleteFailed: 'ಅಳಿಸುವಿಕೆ ವಿಫಲವಾಗಿದೆ',
+    deleteError: 'ನಿಮ್ಮ ಫೈಲ್ ಅಳಿಸುವಲ್ಲಿ ದೋಷವಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+    downloadFailed: 'ಡೌನ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ',
+    downloadError: 'ನಿಮ್ಮ ಫೈಲ್ ಡೌನ್‌ಲೋಡ್ ಮಾಡುವಲ್ಲಿ ದೋಷವಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
+    authRequired: 'ದೃಢೀಕರಣ ಅಗತ್ಯವಿದೆ',
+    signInToAccess: 'ದಯವಿಟ್ಟು ನಿಮ್ಮ ವಾಲ್ಟ್ ಫೈಲ್‌ಗಳನ್ನು ಪ್ರವೇಶಿಸಲು ಸೈನ್ ಇನ್ ಮಾಡಿ.',
+    loadingFailed: 'ನಿಮ್ಮ ವಾಲ್ಟ್ ಫೈಲ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ.'
+  },
+};
 
 interface VaultFile {
   id: string;
@@ -17,6 +118,8 @@ interface VaultFile {
 }
 
 const EmergencyVault = () => {
+
+  const { language } = useContext(VeritasUIContext);
   const [files, setFiles] = useState<VaultFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -33,8 +136,8 @@ const EmergencyVault = () => {
       
       if (userError || !userData.user) {
         toast({
-          title: "Authentication required",
-          description: "Please sign in to access your vault files.",
+          title: translations[language].authRequired,
+          description: translations[language].signInToAccess,
           variant: "destructive",
         });
         setIsLoading(false);
@@ -52,8 +155,8 @@ const EmergencyVault = () => {
     } catch (error) {
       console.error('Error fetching vault files:', error);
       toast({
-        title: "Error",
-        description: "Failed to load your vault files.",
+        title: translations[language].uploadFailed,
+        description: translations[language].loadingFailed,
         variant: "destructive",
       });
     } finally {
@@ -110,8 +213,8 @@ const EmergencyVault = () => {
       if (dbError) throw dbError;
       
       toast({
-        title: "Success",
-        description: "File securely uploaded to your vault.",
+        title: translations[language].success,
+        description: translations[language].uploadSuccess,
       });
       
       setSelectedFile(null);
@@ -119,8 +222,8 @@ const EmergencyVault = () => {
     } catch (error) {
       console.error('Error uploading file:', error);
       toast({
-        title: "Upload failed",
-        description: "There was an error uploading your file. Please try again.",
+        title: translations[language].uploadFailed,
+        description: translations[language].uploadError,
         variant: "destructive",
       });
     } finally {
@@ -149,14 +252,14 @@ const EmergencyVault = () => {
       setFiles(files.filter(file => file.id !== fileId));
       
       toast({
-        title: "Success",
-        description: "File deleted from your vault.",
+        title: translations[language].success,
+        description: translations[language].deleteSuccess,
       });
     } catch (error) {
       console.error('Error deleting file:', error);
       toast({
-        title: "Delete failed",
-        description: "There was an error deleting your file. Please try again.",
+        title: translations[language].deleteFailed,
+        description: translations[language].deleteError,
         variant: "destructive",
       });
     }
@@ -182,8 +285,8 @@ const EmergencyVault = () => {
     } catch (error) {
       console.error('Error downloading file:', error);
       toast({
-        title: "Download failed",
-        description: "There was an error downloading your file. Please try again.",
+        title: translations[language].downloadFailed,
+        description: translations[language].downloadError,
         variant: "destructive",
       });
     }
@@ -216,17 +319,16 @@ const EmergencyVault = () => {
       <main className="flex-grow bg-gray-50">
         <div className="veritas-container py-8">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-veritas-purple">Emergency Vault</h1>
+            <h1 className="text-3xl font-bold text-veritas-purple">{translations[language].title}</h1>
             <p className="text-gray-600 max-w-2xl mx-auto">
-              Securely store sensitive documents with end-to-end encryption. 
-              Your files are protected and only accessible by you.
+              {translations[language].subtitle}
             </p>
           </div>
           
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2">
               <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4">Your Secure Files</h2>
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">{translations[language].yourFiles}</h2>
                 
                 {isLoading ? (
                   <div className="flex justify-center items-center h-40">
@@ -238,8 +340,8 @@ const EmergencyVault = () => {
                       <thead>
                         <tr className="text-left text-sm text-gray-500 border-b">
                           <th className="pb-2">File</th>
-                          <th className="pb-2">Uploaded</th>
-                          <th className="pb-2 text-right">Actions</th>
+                          <th className="pb-2">{translations[language].uploaded}</th>
+                          <th className="pb-2 text-right">{translations[language].actions}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -271,7 +373,7 @@ const EmergencyVault = () => {
                                   onClick={() => downloadFile(file)}
                                   className="text-blue-600 border-blue-200 hover:bg-blue-50"
                                 >
-                                  Download
+                                  {translations[language].download}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -279,7 +381,7 @@ const EmergencyVault = () => {
                                   onClick={() => handleDelete(file.id, file.file_path)}
                                   className="text-red-600 border-red-200 hover:bg-red-50"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Trash2 className="h-4 w-4" /> {translations[language].delete}
                                 </Button>
                               </div>
                             </td>
@@ -291,8 +393,8 @@ const EmergencyVault = () => {
                 ) : (
                   <div className="text-center py-10 border-2 border-dashed border-gray-200 rounded-lg">
                     <Lock className="mx-auto h-10 w-10 text-gray-400" />
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">No files yet</h3>
-                    <p className="mt-1 text-sm text-gray-500">Upload your first secure file to get started</p>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">{translations[language].noFiles}</h3>
+                    <p className="mt-1 text-sm text-gray-500">{translations[language].uploadFirst}</p>
                   </div>
                 )}
               </div>
@@ -300,7 +402,7 @@ const EmergencyVault = () => {
             
             <div className="lg:col-span-1">
               <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4">Upload New File</h2>
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">{translations[language].uploadNew}</h2>
                 
                 <div className="mb-4">
                   <label 
@@ -310,7 +412,7 @@ const EmergencyVault = () => {
                     <div className="flex flex-col items-center justify-center p-3 text-center">
                       <Upload className="w-8 h-8 text-gray-400 mb-2" />
                       <p className="text-sm text-gray-500 font-medium">
-                        {selectedFile ? selectedFile.name : "Click to upload"}
+                        {selectedFile ? selectedFile.name : translations[language].clickToUpload}
                       </p>
                       {selectedFile && (
                         <p className="text-xs text-gray-400">
@@ -334,12 +436,12 @@ const EmergencyVault = () => {
                   {isUploading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Encrypting & Uploading...
+                      {translations[language].encrypting}
                     </>
                   ) : (
                     <>
                       <Lock className="h-4 w-4 mr-2" />
-                      Secure Upload
+                      {translations[language].secureUpload}
                     </>
                   )}
                 </Button>
@@ -348,32 +450,32 @@ const EmergencyVault = () => {
               <div className="bg-veritas-lightPurple rounded-lg p-6">
                 <div className="flex items-center mb-3">
                   <Shield className="h-6 w-6 text-veritas-purple mr-2" />
-                  <h3 className="text-lg font-semibold text-veritas-purple">Vault Security</h3>
+                  <h3 className="text-lg font-semibold text-veritas-purple">{translations[language].vaultSecurity}</h3>
                 </div>
                 <ul className="space-y-2 text-sm">
                   <li className="flex items-start">
                     <div className="bg-veritas-purple rounded-full p-1 mr-2 mt-0.5">
                       <Lock className="h-3 w-3 text-white" />
                     </div>
-                    <span>End-to-end encryption</span>
+                    <span>{translations[language].e2e}</span>
                   </li>
                   <li className="flex items-start">
                     <div className="bg-veritas-purple rounded-full p-1 mr-2 mt-0.5">
                       <Lock className="h-3 w-3 text-white" />
                     </div>
-                    <span>Files accessible only by you</span>
+                    <span>{translations[language].onlyYou}</span>
                   </li>
                   <li className="flex items-start">
                     <div className="bg-veritas-purple rounded-full p-1 mr-2 mt-0.5">
                       <Lock className="h-3 w-3 text-white" />
                     </div>
-                    <span>Tamper-proof storage</span>
+                    <span>{translations[language].tamper}</span>
                   </li>
                   <li className="flex items-start">
                     <div className="bg-veritas-purple rounded-full p-1 mr-2 mt-0.5">
                       <Lock className="h-3 w-3 text-white" />
                     </div>
-                    <span>Legal-grade evidence preservation</span>
+                    <span>{translations[language].legal}</span>
                   </li>
                 </ul>
               </div>

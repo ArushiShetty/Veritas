@@ -18,6 +18,7 @@ import Login from "./pages/Login";
 import SignIn from "./pages/SignIn";
 import SafetyAnalyzer from "./pages/SafetyAnalyzer";
 import VoiceAssistant from "./pages/VoiceAssistant";
+import Profile from "./pages/Profile";
 import { useEffect, useState, createContext } from "react";
 
 const queryClient = new QueryClient();
@@ -92,6 +93,7 @@ const App = () => {
                 <Route path="/vault" element={<EmergencyVault />} />
                 <Route path="/analyzer" element={<SafetyAnalyzer />} />
                 <Route path="/voice-assistant" element={<VoiceAssistant />} />
+                <Route path="/profile" element={<Profile />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </BrowserRouter>
