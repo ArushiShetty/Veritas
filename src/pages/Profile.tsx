@@ -96,7 +96,11 @@ const Profile = () => {
       .from('profiles')
       .upsert(updates, { onConflict: ['user_id'] });
     if (error) {
-      toast({ title: translations[language].updateError, variant: 'destructive' });
+      toast({
+        title: translations[language].updateError,
+        description: error.message || error.details,
+        variant: 'destructive',
+      });
     } else {
       toast({ title: translations[language].updateSuccess });
     }

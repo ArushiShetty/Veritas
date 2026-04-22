@@ -195,8 +195,33 @@ const Verify = () => {
                       <div className="mt-4 flex flex-wrap gap-2">
                         {verificationResult.verified ? (
                           <>
-                            <button className="btn-outline text-sm py-1.5">Download Certificate</button>
-                            <button className="btn-outline text-sm py-1.5">View Blockchain Record</button>
+                            <button
+                              className="btn-outline text-sm py-1.5"
+                              onClick={() => {
+                                // Generate a simple certificate as text
+                                const cert = `VERITAS EVIDENCE CERTIFICATE\n\nCase ID: ${caseId}\nTimestamp: ${new Date(verificationResult.timestamp!).toLocaleString()}\nRecord Type: ${verificationResult.type}\nHash: ${verificationResult.hash}`;
+                                const blob = new Blob([cert], { type: 'text/plain' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `veritas-certificate-${caseId}.txt`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                              }}
+                            >
+                              Download Certificate
+                            </button>
+                            <button
+                              className="btn-outline text-sm py-1.5"
+                              onClick={() => {
+                                // Open a fake blockchain explorer link (for demo)
+                                window.open(`https://mumbai.polygonscan.com/tx/${verificationResult.hash}`, '_blank');
+                              }}
+                            >
+                              View Blockchain Record
+                            </button>
                           </>
                         ) : (
                           <button className="btn-outline text-sm py-1.5">Contact Support</button>
