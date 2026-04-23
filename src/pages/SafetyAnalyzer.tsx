@@ -17,6 +17,7 @@ const redFlagPatterns = [
   { pattern: /click here|link|http/i, category: 'Suspicious Link', explanation: 'Message contains a suspicious link.' },
 ];
 
+
 // Example national helplines in multiple languages
 const EMERGENCY_HELPLINES: Record<string, string[]> = {
   en: [
@@ -37,6 +38,14 @@ const EMERGENCY_HELPLINES: Record<string, string[]> = {
     'ಮಕ್ಕಳ ಸಹಾಯವಾಣಿ: 1098',
     'ಸೈಬರ್ ಕ್ರೈಮ್: 155260',
   ],
+};
+
+const parseHelpline = (entry: string) => {
+  const [name, rawNumber] = entry.split(':');
+  const label = name?.trim() ?? entry;
+  const number = rawNumber?.trim() ?? '';
+  const telNumber = number.replace(/[^\d+]/g, '');
+  return { label, number, telNumber };
 };
 
 interface RedFlag {
@@ -200,7 +209,20 @@ const SafetyAnalyzer = () => {
                 <h3 className="font-bold mb-2">{language === 'en' ? 'National Helplines' : language === 'hi' ? 'राष्ट्रीय हेल्पलाइन' : 'ರಾಷ್ಟ್ರೀಯ ಸಹಾಯವಾಣಿ'}</h3>
                 <ul className="text-sm">
                   {EMERGENCY_HELPLINES[language]?.map((hl, i) => (
-                    <li key={i} className="mb-1">{hl}</li>
+                    <li key={i} className="mb-1 flex items-center gap-2">
+                      {(() => {
+                        const { label, number, telNumber } = parseHelpline(hl);
+                        return (
+                          <>
+                            <span>{label}:</span>
+                            <a href={`tel:${telNumber}`} className="inline-flex items-center gap-1 underline">
+                              <Phone className="h-3.5 w-3.5" />
+                              {number}
+                            </a>
+                          </>
+                        );
+                      })()}
+                    </li>
                   ))}
                 </ul>
               </div>

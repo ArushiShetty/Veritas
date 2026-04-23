@@ -83,6 +83,7 @@ const App = () => {
             >
               🚨 Panic
             </button>
+            {/* Global toggles bar */}
             <div className={"w-full flex justify-end items-center gap-4 px-6 py-2 border-b bg-white/80 dark:bg-gray-900/80 sticky top-0 z-40"}>
               <label htmlFor="veritas-lang" className="font-medium mr-1">🌐</label>
               <select

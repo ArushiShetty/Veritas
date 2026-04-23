@@ -31,6 +31,13 @@ const Verify = () => {
     setCaseId(e.target.value);
   };
 
+  const isCaseIdFormat = (value: string) => /^VR-[a-zA-Z0-9]{5}-[A-Z0-9]{5}$/.test(value);
+  const isHashFormat = (value: string) => /^(0x)?[a-fA-F0-9]{40,64}$/.test(value.trim());
+  const toDisplayHash = (value: string) => {
+    const trimmed = value.trim();
+    return trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!caseId) {
@@ -42,40 +49,47 @@ const Verify = () => {
       return;
     }
 
-    // Validate case ID format (simple check)
-    const caseIdPattern = /^VR-[a-zA-Z0-9]{5}-[A-Z0-9]{5}$/;
-    if (!caseIdPattern.test(caseId)) {
+    const input = caseId.trim();
+    const validCaseId = isCaseIdFormat(input);
+    const validHash = isHashFormat(input);
+
+    // Accept either standard case ID or pasted blockchain hash.
+    if (!validCaseId && !validHash) {
       toast({
-        title: "Invalid Case ID Format",
-        description: "Please enter a valid Case ID (e.g., VR-8f32a-DQ7TR)",
+        title: "Invalid ID or Hash Format",
+        description: "Enter a valid Case ID (e.g., VR-8f32a-DQ7TR) or a blockchain hash.",
         variant: "destructive",
       });
       return;
     }
 
     setVerifying(true);
-    
-    // Simulate verification API call
+
+    // Simulate verification result with deterministic behavior for hash input.
     setTimeout(() => {
-      // This is just a simulation - in a real app, you'd check against your backend
-      const isSuccess = Math.random() > 0.3; // 70% chance of success
-      
+      const isSuccess = validHash || validCaseId;
+
       if (isSuccess) {
-        // Generate fake verification data
         const date = new Date();
-        date.setDate(date.getDate() - Math.floor(Math.random() * 30)); // Random date within last 30 days
-        
+        date.setDate(date.getDate() - 2);
+
+        const displayHash = validHash
+          ? toDisplayHash(input)
+          : `0x${Array(40).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+
         setVerificationResult({
           verified: true,
           timestamp: date.toISOString(),
-          type: Math.random() > 0.5 ? "Report Submission" : "Evidence Addition",
+          type: validHash ? "Evidence Hash Verification" : "Report Submission",
           details: "This case has been verified against our blockchain records. The timestamp and hash match our secure database.",
-          hash: `0x${Array(40).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('')}`,
+          hash: displayHash,
         });
-        
+
         toast({
           title: "Verification Successful",
-          description: "The case ID has been verified in our records.",
+          description: validHash
+            ? "Hash key verified successfully."
+            : "The case ID has been verified in our records.",
         });
       } else {
         setVerificationResult({

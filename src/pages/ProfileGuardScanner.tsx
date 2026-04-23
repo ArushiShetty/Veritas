@@ -2,7 +2,7 @@ import React, { useState, useContext } from 'react';
 import { VeritasUIContext } from '../App';
 import Navigation from '../components/Navigation';
 import Footer from '../components/Footer';
-import { Loader2, CheckCircle, AlertTriangle, Info, ThumbsUp, ThumbsDown, Flag, User } from 'lucide-react';
+import { Loader2, CheckCircle, AlertTriangle, Info, ThumbsUp, ThumbsDown, Flag, User, Phone } from 'lucide-react';
 
 const API_URL = 'http://localhost:5000/analyze_profile'; // Change if backend is hosted elsewhere
 
@@ -43,6 +43,13 @@ const EMERGENCY_HELPLINES = {
   ]
 };
 
+const parseHelpline = (entry: string) => {
+  const [name, rawNumber] = entry.split(':');
+  const label = name?.trim() ?? entry;
+  const number = rawNumber?.trim() ?? '';
+  const telNumber = number.replace(/[^\d+]/g, '');
+  return { label, number, telNumber };
+};
 
 const ProfileGuardScanner = () => {
   const [step, setStep] = useState(1);
@@ -199,7 +206,20 @@ const ProfileGuardScanner = () => {
                 <h3 className="font-bold mb-2">{language === 'en' ? 'Emergency Helplines' : language === 'hi' ? 'आपातकालीन हेल्पलाइन' : 'ತುರ್ತು ಸಹಾಯವಾಣಿ'}</h3>
                 <ul className="text-sm">
                   {EMERGENCY_HELPLINES[language].map((hl, i) => (
-                    <li key={i} className="mb-1">{hl}</li>
+                    <li key={i} className="mb-1 flex items-center gap-2">
+                      {(() => {
+                        const { label, number, telNumber } = parseHelpline(hl);
+                        return (
+                          <>
+                            <span>{label}:</span>
+                            <a href={`tel:${telNumber}`} className="inline-flex items-center gap-1 underline">
+                              <Phone className="h-3.5 w-3.5" />
+                              {number}
+                            </a>
+                          </>
+                        );
+                      })()}
+                    </li>
                   ))}
                 </ul>
               </div>

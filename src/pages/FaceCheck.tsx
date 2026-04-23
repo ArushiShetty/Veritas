@@ -1,31 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Navigation from '../components/Navigation';
 import Footer from '../components/Footer';
 import { useToast } from '@/components/ui/use-toast';
-import { useDeepfakeDetector } from '@/hooks/useDeepfakeDetector';
 import { Button } from '@/components/ui/button';
-import { Upload, AlertCircle, CheckCircle, Loader2, Image, Info, Shield, Share2, Camera, Eye, Zap } from 'lucide-react';
+import { Upload, AlertCircle, CheckCircle, Loader2, Image, Shield, Share2, Camera, Eye, Zap, Volume2 } from 'lucide-react';
 import { supabase } from "@/integrations/supabase/client";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from '@/lib/utils';
+import { analyzeImageWithGemini, GeminiAnalysis } from '@/lib/geminiService';
 
 const FaceCheck = () => {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const { isAnalyzing, result: analysisResult, error: detectorError, analyze } = useDeepfakeDetector();
-  const [analysisText, setAnalysisText] = useState<string | null>(null);
-  const [riskLevel, setRiskLevel] = useState<'low' | 'medium' | 'high' | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<GeminiAnalysis | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const { toast } = useToast();
   const [previousAnalyses, setPreviousAnalyses] = useState<any[]>([]);
-  const [loadingPrevious, setLoadingPrevious] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [isRealImage, setIsRealImage] = useState<boolean | null>(null);
-  const [accuracyPercentage, setAccuracyPercentage] = useState<number | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
@@ -85,7 +82,6 @@ const FaceCheck = () => {
   useEffect(() => {
     const loadPreviousAnalyses = async () => {
       try {
-        setLoadingPrevious(true);
         const { data: { user } } = await supabase.auth.getUser();
         
         if (user) {
@@ -101,11 +97,30 @@ const FaceCheck = () => {
       } catch (error) {
         console.error("Error loading previous analyses:", error);
       } finally {
-        setLoadingPrevious(false);
+        // no-op
       }
     };
     
     loadPreviousAnalyses();
+  }, []);
+
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+
+    const synth = window.speechSynthesis;
+    const loadVoices = () => {
+      const voices = synth.getVoices();
+      if (voices.length) {
+        setAvailableVoices(voices);
+      }
+    };
+
+    loadVoices();
+    synth.onvoiceschanged = loadVoices;
+
+    return () => {
+      synth.onvoiceschanged = null;
+    };
   }, []);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -142,12 +157,9 @@ const FaceCheck = () => {
     reader.readAsDataURL(file);
     
     setAnalysisResult(null);
-    setRiskLevel(null);
     setErrorMessage(null);
     setUploadProgress(0);
-    setIsFallback(false);
-    setIsRealImage(null);
-    setAccuracyPercentage(null);
+    setStatusMessage(null);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -171,10 +183,6 @@ const FaceCheck = () => {
   const handleRetry = () => {
     if (selectedImage) {
       setErrorMessage(null);
-      setAnalysisText(null);
-      setRiskLevel(null);
-      setIsRealImage(null);
-      setAccuracyPercentage(null);
       handleAnalyze();
     }
   };
@@ -182,142 +190,101 @@ const FaceCheck = () => {
   const handleClear = () => {
     setSelectedImage(null);
     setPreviewUrl(null);
-    setAnalysisText(null);
-    setRiskLevel(null);
+    setAnalysisResult(null);
     setErrorMessage(null);
     setUploadProgress(0);
-    setIsRealImage(null);
-    setAccuracyPercentage(null);
     setStatusMessage(null);
   };
 
   const handleAnalyze = async () => {
-    if (!selectedImage || !previewUrl) return;
+    if (!selectedImage) return;
 
-    setStatusMessage("Analyzing image for deepfake detection...");
+    setStatusMessage("Analyzing image with Gemini...");
     setErrorMessage(null);
-    setAnalysisText(null);
-    setRiskLevel(null);
-    setIsRealImage(null);
-    setAccuracyPercentage(null);
+    setAnalysisResult(null);
+    setIsAnalyzing(true);
 
     try {
-      console.log('🚀 Starting analysis with image:', selectedImage.name);
-
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          const increment = prev < 50 ? 10 : prev < 80 ? 5 : 2;
-          if (prev >= 95) {
-            clearInterval(progressInterval);
-            return prev;
-          }
-          return Math.min(prev + increment, 95);
-        });
-      }, 150);
-
+      setUploadProgress(20);
       toast({
         title: "Starting analysis",
-        description: "Analyzing image with client-side deepfake detection...",
+        description: "Sending uploaded image to Gemini forensic analyzer...",
       });
 
-      // Load image from preview
-      const img = new window.Image();
-      
-      img.onload = async () => {
-        try {
-          console.log('✅ Image loaded successfully');
-          setStatusMessage("Running tensor analysis...");
+      const result = await analyzeImageWithGemini(selectedImage, () => {
+        setErrorMessage('Server busy, retrying in 2 seconds...');
+      });
+      setUploadProgress(100);
+      setStatusMessage(null);
+      setErrorMessage(null);
+      setAnalysisResult(result);
 
-          // Perform client-side analysis
-          const result = await analyze(img);
-          console.log('📊 Analysis result:', result);
-
-          setUploadProgress(95);
-          setStatusMessage("Finalizing results...");
-
-          // Format analysis text
-          const analysisDetails = [
-            `Frequency Anomaly Score: ${result.details.frequencyAnomaly}%`,
-            `Compression Artifacts: ${result.details.compressionArtifacts}%`,
-            `Texture Inconsistency: ${result.details.textureInconsistency}%`,
-            `Color Anomalies: ${result.details.colorAnomalies}%`,
-          ].join('\n');
-
-          const resultText = `DEEPFAKE ANALYSIS RESULTS\n\nOverall Risk Level: ${result.riskLevel.toUpperCase()}\nConfidence Score: ${result.confidence}%\n\nANALYSIS BREAKDOWN:\n${analysisDetails}\n\nCONCLUSION:\n${
-            result.riskLevel === 'low'
-              ? '✓ This image appears to be AUTHENTIC. It shows natural characteristics consistent with genuine photographs.'
-              : result.riskLevel === 'medium'
-              ? '⚠ Analysis is INCONCLUSIVE. Some characteristics suggest potential modification. Use additional verification methods.'
-              : '⚠ LIKELY AI-GENERATED OR DEEPFAKE. This image shows strong characteristics of being artificially generated or manipulated.'
-          }`;
-
-          setUploadProgress(100);
-          setStatusMessage(null);
-          setAnalysisText(resultText);
-          setRiskLevel(result.riskLevel);
-          setIsRealImage(result.riskLevel === 'low');
-          setAccuracyPercentage(result.confidence);
-
-          // Show result toast
-          if (result.riskLevel === 'low') {
-            toast({
-              title: "✓ Authentic Image",
-              description: `This image appears genuine with ${result.confidence}% confidence`,
-            });
-          } else if (result.riskLevel === 'medium') {
-            toast({
-              title: "⚠ Inconclusive Results",
-              description: `Analysis shows ${result.confidence}% confidence of manipulation`,
-            });
-          } else {
-            toast({
-              title: "⚠ AI/Deepfake Detected",
-              description: `${result.confidence}% confidence this is AI-generated`,
-            });
-          }
-
-          // Save to local history
-          const newAnalysis = {
-            id: `local-${Date.now()}`,
-            image_url: previewUrl,
-            risk_level: result.riskLevel,
-            analysis: resultText,
-            created_at: new Date().toISOString(),
-          };
-          setPreviousAnalyses(prev => [newAnalysis, ...prev.slice(0, 4)]);
-
-          clearInterval(progressInterval);
-        } catch (err: any) {
-          clearInterval(progressInterval);
-          console.error('❌ Error in image onload callback:', err);
-          throw err;
-        }
+      const newAnalysis = {
+        id: `local-${Date.now()}`,
+        image_url: previewUrl,
+        risk_level: result.status,
+        analysis: result.analysis_en,
+        created_at: new Date().toISOString(),
       };
+      setPreviousAnalyses(prev => [newAnalysis, ...prev.slice(0, 4)]);
 
-      img.onerror = () => {
-        clearInterval(progressInterval);
-        console.error('❌ Failed to load image');
-        throw new Error('Failed to load image for analysis');
-      };
-
-      console.log('🔗 Setting image source from preview:', previewUrl);
-      img.src = previewUrl;
+      toast({
+        title: "Analysis completed",
+        description: `${result.status} (${Math.round(result.confidence * 100)}% confidence)`,
+      });
     } catch (error: any) {
-      console.error('Error analyzing image:', error);
-      setErrorMessage(error.message || detectorError || 'There was an error analyzing the image');
+      setErrorMessage(error.message || 'There was an error analyzing the image');
       toast({
         title: 'Analysis failed',
-        description: error.message || detectorError || 'There was an error analyzing the image. Please try again.',
+        description: error.message || 'There was an error analyzing the image. Please try again.',
         variant: 'destructive',
       });
     } finally {
-      setUploadProgress(0);
+      setIsAnalyzing(false);
     }
   };
 
+  const speakAnalysis = (text: string, langCode: 'en-US' | 'kn-IN' | 'hi-IN') => {
+    if (!('speechSynthesis' in window)) {
+      toast({ title: 'Speech not supported', description: 'Your browser does not support voice playback.' });
+      return;
+    }
+
+    const synth = window.speechSynthesis;
+    // Chrome warm-up fix: clear any stale queue before speaking.
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+
+    const voices = availableVoices.length ? availableVoices : window.speechSynthesis.getVoices();
+    const targetLangCode = langCode;
+    const targetLangName = langCode === 'kn-IN' ? 'kannada' : langCode === 'hi-IN' ? 'hindi' : 'english';
+
+    // Explicit native matching for Kannada/Hindi plus generic fallback logic.
+    let selectedVoice = voices.find(
+      (v) =>
+        v.lang.includes(targetLangCode) ||
+        v.name.toLowerCase().includes(targetLangName)
+    );
+
+    if (!selectedVoice && langCode === 'kn-IN') {
+      selectedVoice = voices.find((v) => v.lang === 'kn-IN' || v.name.includes('Kannada'));
+    }
+    if (!selectedVoice && langCode === 'hi-IN') {
+      selectedVoice = voices.find((v) => v.lang === 'hi-IN' || v.name.includes('Hindi'));
+    }
+
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+      utterance.lang = selectedVoice.lang;
+    } else {
+      utterance.lang = targetLangCode;
+    }
+
+    synth.speak(utterance);
+  };
+
   const handleShareResults = () => {
-    const shareText = `I checked an image with ProfileGuard and it was classified as ${riskLevel?.toUpperCase()} RISK.`;
+    const shareText = `I checked an image with ProfileGuard and it was classified as ${analysisResult?.status ?? 'Unknown'}.`;
     
     if (navigator.share) {
       navigator.share({
@@ -338,34 +305,10 @@ const FaceCheck = () => {
     }
   };
 
-  const getResultMessage = () => {
-    if (!riskLevel) return null;
-    
-    if (riskLevel === 'low') {
-      return {
-        title: "Authentic Image Detected ✓",
-        message: "This image passes deepfake detection and appears to be a genuine photograph. The analysis shows natural characteristics consistent with authentic photos.",
-        color: "text-green-600",
-        bgColor: "bg-green-50",
-        borderColor: "border-green-200"
-      };
-    } else if (riskLevel === 'medium') {
-      return {
-        title: "Inconclusive Analysis ⚠",
-        message: "This image shows some characteristics that could indicate manipulation or AI generation. Exercise caution and use additional verification methods.",
-        color: "text-amber-600",
-        bgColor: "bg-amber-50",
-        borderColor: "border-amber-200"
-      };
-    } else {
-      return {
-        title: "AI/Deepfake Indicators Detected",
-        message: "This image shows strong signs of being AI-generated or heavily manipulated. We recommend treating it as potentially untrustworthy.",
-        color: "text-red-600",
-        bgColor: "bg-red-50",
-        borderColor: "border-red-200"
-      };
-    }
+  const getResultTheme = (status: GeminiAnalysis['status']) => {
+    if (status === 'Real') return { color: "text-green-600", bgColor: "bg-green-50", borderColor: "border-green-200" };
+    if (status === 'Digital Asset') return { color: "text-amber-600", bgColor: "bg-amber-50", borderColor: "border-amber-200" };
+    return { color: "text-red-600", bgColor: "bg-red-50", borderColor: "border-red-200" };
   };
 
   return (
@@ -537,48 +480,58 @@ const FaceCheck = () => {
                 )}
 
                 {/* Results Section */}
-                {analysisText && riskLevel && (
+                {analysisResult && (
                   <div className="mt-6">
                     {(() => {
-                      const result = getResultMessage();
-                      if (!result) return null;
-                      
+                      const resultTheme = getResultTheme(analysisResult.status);
                       return (
                         <div className={cn(
                           "rounded-xl border p-6",
-                          result.bgColor,
-                          result.borderColor
+                          resultTheme.bgColor,
+                          resultTheme.borderColor
                         )}>
                           <div className="flex items-start gap-4">
                             <div className={cn(
                               "p-2 rounded-full",
-                              riskLevel === 'low' ? "bg-green-100" : 
-                              riskLevel === 'medium' ? "bg-amber-100" : "bg-red-100"
+                              analysisResult.status === 'Real' ? "bg-green-100" :
+                              analysisResult.status === 'Digital Asset' ? "bg-amber-100" : "bg-red-100"
                             )}>
-                              {riskLevel === 'low' ? (
+                              {analysisResult.status === 'Real' ? (
                                 <CheckCircle className="w-6 h-6 text-green-600" />
                               ) : (
                                 <AlertCircle className={cn(
                                   "w-6 h-6",
-                                  riskLevel === 'medium' ? "text-amber-600" : "text-red-600"
+                                  analysisResult.status === 'Digital Asset' ? "text-amber-600" : "text-red-600"
                                 )} />
                               )}
                             </div>
                             <div className="flex-1">
-                              <h3 className={cn("text-lg font-semibold mb-1", result.color)}>
-                                {result.title}
+                              <h3 className={cn("text-lg font-semibold mb-1", resultTheme.color)}>
+                                Status: {analysisResult.status}
                               </h3>
-                              <p className="text-gray-700 mb-3">{result.message}</p>
+                              <p className="text-gray-700 mb-3">{analysisResult.analysis_en}</p>
+                              <p className="text-gray-700 mb-2">{analysisResult.analysis_kn}</p>
+                              <p className="text-gray-700 mb-3">{analysisResult.analysis_hi}</p>
                               
-                              {accuracyPercentage !== null && (
-                                <div className="mb-4">
-                                  <div className="flex justify-between text-sm mb-1">
-                                    <span className="text-gray-600">Confidence</span>
-                                    <span className="font-medium">{accuracyPercentage}%</span>
-                                  </div>
-                                  <Progress value={accuracyPercentage} className="h-2" />
+                              <div className="mb-4">
+                                <div className="flex justify-between text-sm mb-1">
+                                  <span className="text-gray-600">Confidence</span>
+                                  <span className="font-medium">{Math.round(analysisResult.confidence * 100)}%</span>
                                 </div>
-                              )}
+                                <Progress value={Math.round(analysisResult.confidence * 100)} className="h-2" />
+                              </div>
+
+                              <div className="flex flex-wrap gap-2 mb-3">
+                                <Button variant="outline" size="sm" onClick={() => speakAnalysis(analysisResult.analysis_en, 'en-US')}>
+                                  <Volume2 className="w-4 h-4 mr-2" /> English
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => speakAnalysis(analysisResult.analysis_kn, 'kn-IN')}>
+                                  <Volume2 className="w-4 h-4 mr-2" /> ಕನ್ನಡ
+                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => speakAnalysis(analysisResult.analysis_hi, 'hi-IN')}>
+                                  <Volume2 className="w-4 h-4 mr-2" /> हिंदी
+                                </Button>
+                              </div>
                               
                               <div className="flex gap-2">
                                 <Button
@@ -641,12 +594,11 @@ const FaceCheck = () => {
                         <div className="flex items-center justify-between">
                           <span className={cn(
                             "text-xs font-medium px-2 py-1 rounded-full",
-                            analysis.risk_level === 'low' ? "bg-green-100 text-green-700" :
-                            analysis.risk_level === 'medium' ? "bg-amber-100 text-amber-700" :
+                            analysis.risk_level === 'Real' ? "bg-green-100 text-green-700" :
+                            analysis.risk_level === 'Digital Asset' ? "bg-amber-100 text-amber-700" :
                             "bg-red-100 text-red-700"
                           )}>
-                            {analysis.risk_level === 'low' ? 'Real' : 
-                             analysis.risk_level === 'medium' ? 'Uncertain' : 'AI'}
+                            {analysis.risk_level}
                           </span>
                           <span className="text-xs text-gray-500">
                             {new Date(analysis.created_at).toLocaleDateString()}

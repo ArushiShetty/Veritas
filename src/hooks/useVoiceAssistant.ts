@@ -55,6 +55,7 @@ export const useVoiceAssistant = () => {
   
   const recognitionRef = useRef<SpeechRecognitionInterface | null>(null);
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
 
   // Initialize speech recognition
   useEffect(() => {
@@ -100,6 +101,25 @@ export const useVoiceAssistant = () => {
     };
   }, [language]);
 
+  // Load speech voices asynchronously (required in Chrome).
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length) {
+        voicesRef.current = voices;
+      }
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, []);
+
   const startListening = useCallback(() => {
     if (!recognitionRef.current) {
       toast({
@@ -130,7 +150,7 @@ export const useVoiceAssistant = () => {
     setIsListening(false);
   }, []);
 
-  const speak = useCallback((text: string) => {
+  const speak = useCallback(async (text: string) => {
     if (!('speechSynthesis' in window)) {
       toast({
         title: "Not Supported",
@@ -140,7 +160,7 @@ export const useVoiceAssistant = () => {
       return;
     }
 
-    // Cancel any ongoing speech
+    // Clear queue to avoid stuck/silent speech in Chrome.
     window.speechSynthesis.cancel();
     
     // Chrome has a bug where long text can fail - split into chunks if needed
@@ -151,7 +171,8 @@ export const useVoiceAssistant = () => {
     utterance.rate = 0.9;
     utterance.pitch = 1;
     utterance.volume = 1;
-    utterance.lang = language;
+    const targetLanguage: SupportedLanguage = language;
+    utterance.lang = targetLanguage;
 
     // Set event handlers BEFORE speaking
     utterance.onstart = () => {
@@ -177,46 +198,38 @@ export const useVoiceAssistant = () => {
 
     synthRef.current = utterance;
 
-    // Function to find and set the best voice for the language
-    const setVoiceAndSpeak = () => {
-      const voices = window.speechSynthesis.getVoices();
-      const langCode = language.split('-')[0]; // 'kn', 'hi', 'en'
-      
-      // Priority: Google voice > Microsoft voice > exact match > prefix match
-      const googleVoice = voices.find(v => 
-        v.name.toLowerCase().includes('google') && 
-        (v.lang === language || v.lang.startsWith(langCode))
-      );
-      const microsoftVoice = voices.find(v => 
-        v.name.toLowerCase().includes('microsoft') && 
-        (v.lang === language || v.lang.startsWith(langCode))
-      );
-      const exactMatch = voices.find(v => v.lang === language);
-      const prefixMatch = voices.find(v => v.lang.startsWith(langCode));
-      
-      const selectedVoice = googleVoice || microsoftVoice || exactMatch || prefixMatch || voices[0];
-      
-      if (selectedVoice) {
-        utterance.voice = selectedVoice;
-        console.log(`Using voice: ${selectedVoice.name} (${selectedVoice.lang})`);
-      } else {
-        console.log(`No voice found for ${language}, using browser default`);
-      }
-      
-      // Start speaking
-      setIsSpeaking(true);
-      window.speechSynthesis.speak(utterance);
-    };
-
-    // Voices may load async - wait for them if needed
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length === 0) {
-      window.speechSynthesis.onvoiceschanged = () => {
-        setVoiceAndSpeak();
-      };
-    } else {
-      setVoiceAndSpeak();
+    let voices = voicesRef.current.length
+      ? voicesRef.current
+      : window.speechSynthesis.getVoices();
+    if (!voices.length) {
+      await new Promise<void>((resolve) => {
+        window.speechSynthesis.onvoiceschanged = () => {
+          voices = window.speechSynthesis.getVoices();
+          voicesRef.current = voices;
+          resolve();
+        };
+      });
     }
+
+    let foundVoice: SpeechSynthesisVoice | undefined;
+    if (targetLanguage === 'kn-IN') {
+      foundVoice = voices.find((v) => v.lang === 'kn-IN');
+    } else if (targetLanguage === 'hi-IN') {
+      foundVoice = voices.find((v) => v.lang === 'hi-IN');
+    } else {
+      foundVoice =
+        voices.find((v) => v.lang === 'en-US') ||
+        voices.find((v) => v.lang.toLowerCase().startsWith('en'));
+    }
+
+    if (foundVoice) {
+      utterance.voice = foundVoice;
+    }
+    // Force selected language pack even without an exact voice match.
+    utterance.lang = targetLanguage;
+
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
   }, [toast, language]);
 
   const stopSpeaking = useCallback(() => {
