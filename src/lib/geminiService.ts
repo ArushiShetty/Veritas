@@ -6,10 +6,10 @@ export interface GeminiAnalysis {
   confidence: number;
 }
 
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`;
 
 const SYSTEM_PROMPT =
-  'You are a forensic analyst. Analyze the image and return a JSON object with: { "status": "Real" | "AI" | "Digital Asset", "analysis_en": "...", "analysis_kn": "...", "analysis_hi": "...", "confidence": 0.85 }. Write Kannada and Hindi in a natural, spoken flow. Return only valid JSON with no markdown.';
+  'You are a forensic analyst. Analyze the uploaded image for security/forensic markers and return a JSON object with: { "status": "Real" | "AI" | "Digital Asset", "result_en": "Full forensic analysis in English.", "result_kn": "Full forensic analysis in Kannada.", "result_hi": "Full forensic analysis in Hindi.", "confidence": 0.85 }. Write Kannada and Hindi in a natural, spoken flow. Return only valid JSON with no markdown.';
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -57,9 +57,9 @@ function normalizeAnalysis(value: unknown): GeminiAnalysis {
 
   return {
     status,
-    analysis_en: typeof obj.analysis_en === "string" ? obj.analysis_en : fallback.analysis_en,
-    analysis_kn: typeof obj.analysis_kn === "string" ? obj.analysis_kn : fallback.analysis_kn,
-    analysis_hi: typeof obj.analysis_hi === "string" ? obj.analysis_hi : fallback.analysis_hi,
+    analysis_en: typeof obj.result_en === "string" ? obj.result_en : (typeof obj.analysis_en === "string" ? obj.analysis_en : fallback.analysis_en),
+    analysis_kn: typeof obj.result_kn === "string" ? obj.result_kn : (typeof obj.analysis_kn === "string" ? obj.analysis_kn : fallback.analysis_kn),
+    analysis_hi: typeof obj.result_hi === "string" ? obj.result_hi : (typeof obj.analysis_hi === "string" ? obj.analysis_hi : fallback.analysis_hi),
     confidence,
   };
 }
@@ -90,26 +90,49 @@ export async function analyzeImageWithGemini(
         ],
       },
     ],
+    safetySettings: [
+      {
+        category: "HARM_CATEGORY_HARASSMENT",
+        threshold: "BLOCK_NONE"
+      },
+      {
+        category: "HARM_CATEGORY_HATE_SPEECH",
+        threshold: "BLOCK_NONE"
+      },
+      {
+        category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        threshold: "BLOCK_NONE"
+      },
+      {
+        category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+        threshold: "BLOCK_NONE"
+      }
+    ],
     generationConfig: {
       temperature: 0.2,
       responseMimeType: "application/json",
     },
   });
 
-  let response = await fetch(GEMINI_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: requestBody,
-  });
-
-  if (response.status === 503) {
-    onRetry503?.();
-    await wait(2000);
+  let response: Response;
+  try {
     response = await fetch(GEMINI_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: requestBody,
     });
+
+    if (response.status === 503) {
+      onRetry503?.();
+      await wait(1500);
+      response = await fetch(GEMINI_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: requestBody,
+      });
+    }
+  } catch (error) {
+    throw new Error(`Failed to communicate with Gemini: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   if (!response.ok) {
