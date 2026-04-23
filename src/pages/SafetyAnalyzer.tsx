@@ -17,6 +17,7 @@ const redFlagPatterns = [
   { pattern: /click here|link|http/i, category: 'Suspicious Link', explanation: 'Message contains a suspicious link.' },
 ];
 
+
 // Example national helplines in multiple languages
 const EMERGENCY_HELPLINES: Record<string, string[]> = {
   en: [

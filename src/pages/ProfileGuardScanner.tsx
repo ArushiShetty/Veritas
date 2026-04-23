@@ -51,7 +51,6 @@ const parseHelpline = (entry: string) => {
   return { label, number, telNumber };
 };
 
-
 const ProfileGuardScanner = () => {
   const [step, setStep] = useState(1);
   const { language, darkMode } = useContext(VeritasUIContext);

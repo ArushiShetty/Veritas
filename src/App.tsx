@@ -58,6 +58,31 @@ const App = () => {
       <TooltipProvider>
         <VeritasUIContext.Provider value={{ language, setLanguage, darkMode, setDarkMode }}>
           <div className={darkMode ? 'dark bg-gray-900 text-white min-h-screen' : 'bg-white min-h-screen'}>
+            {/* Panic Button */}
+            <button
+              onClick={() => window.location.href = '/analyzer#helplines'}
+              style={{
+                position: 'fixed',
+                bottom: 24,
+                right: 24,
+                zIndex: 9999,
+                background: '#e11d48',
+                color: 'white',
+                border: 'none',
+                borderRadius: '9999px',
+                padding: '0.75rem 1.5rem',
+                fontWeight: 'bold',
+                fontSize: '1rem',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}
+              onMouseOver={e => (e.currentTarget.style.background = '#be123c')}
+              onMouseOut={e => (e.currentTarget.style.background = '#e11d48')}
+              aria-label="Quickly go to a safe page"
+            >
+              🚨 Panic
+            </button>
             {/* Global toggles bar */}
             <div className={"w-full flex justify-end items-center gap-4 px-6 py-2 border-b bg-white/80 dark:bg-gray-900/80 sticky top-0 z-40"}>
               <label htmlFor="veritas-lang" className="font-medium mr-1">🌐</label>
