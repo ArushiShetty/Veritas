@@ -151,6 +151,9 @@ export const useVoiceAssistant = () => {
   }, []);
 
   const speak = useCallback(async (text: string) => {
+    // Fix 'Stuck' Audio: Call window.speechSynthesis.cancel() at the very beginning
+    window.speechSynthesis.cancel();
+
     if (!('speechSynthesis' in window)) {
       toast({
         title: "Not Supported",
@@ -160,37 +163,54 @@ export const useVoiceAssistant = () => {
       return;
     }
 
-    // Clear queue to avoid stuck/silent speech in Chrome.
-    window.speechSynthesis.cancel();
-    
+    // The 'Speak-Empty' Hack: Wake up Chrome Speech Synthesis engine
+    const wakeUpUtterance = new SpeechSynthesisUtterance('');
+    wakeUpUtterance.lang = 'en-US';
+    window.speechSynthesis.speak(wakeUpUtterance);
+
     // Chrome has a bug where long text can fail - split into chunks if needed
     const maxLength = 200;
     const textToSpeak = text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
     
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    utterance.rate = 0.9;
+    
+    // Manual Rate & Pitch: Explicitly set to 1
+    utterance.rate = 1;
     utterance.pitch = 1;
     utterance.volume = 1;
-    const targetLanguage: SupportedLanguage = language;
-    utterance.lang = targetLanguage;
+
+    // Detection: Checks if the text contains Kannada characters
+    const hasKannada = /[\u0C80-\u0CFF]/.test(textToSpeak);
+
+    // The Logic Bridge
+    const langMap: Record<string, string> = { English: 'en-US', Hindi: 'hi-IN', Kannada: 'kn-IN' };
+    const currentLangLabel = LANGUAGE_OPTIONS.find(opt => opt.code === language)?.label || 'English';
+    let targetLangCode = langMap[currentLangLabel] || language;
+
+    // The Accent Overwrite: Explicitly set utterance.lang = 'kn-IN' for the entire text
+    if (hasKannada) {
+      targetLangCode = 'kn-IN';
+    }
+    
+    utterance.lang = targetLangCode;
 
     // Set event handlers BEFORE speaking
     utterance.onstart = () => {
       console.log('Speech started');
       setIsSpeaking(true);
     };
-    utterance.onend = () => {
-      console.log('Speech ended');
+    utterance.onend = (e) => {
+      console.log('Speech ended successfully. Event:', e);
       setIsSpeaking(false);
     };
     utterance.onerror = (e) => {
-      console.error('Speech error:', e.error);
+      console.error('Speech error:', e);
       setIsSpeaking(false);
       // Don't show toast for 'interrupted' errors (user cancelled)
       if (e.error !== 'interrupted' && e.error !== 'canceled') {
         toast({
           title: "Speech Error",
-          description: "Could not play voice. Try using a different browser.",
+          description: `Could not play voice (${e.error}). Try using a different browser.`,
           variant: "destructive",
         });
       }
@@ -198,35 +218,73 @@ export const useVoiceAssistant = () => {
 
     synthRef.current = utterance;
 
-    let voices = voicesRef.current.length
-      ? voicesRef.current
-      : window.speechSynthesis.getVoices();
+    // The Refresh Hack: Call getVoices() twice
+    let voices = window.speechSynthesis.getVoices();
+    if (!voices.length) {
+      voices = window.speechSynthesis.getVoices();
+    }
+    
     if (!voices.length) {
       await new Promise<void>((resolve) => {
         window.speechSynthesis.onvoiceschanged = () => {
           voices = window.speechSynthesis.getVoices();
+          if (!voices.length) voices = window.speechSynthesis.getVoices(); // Double call hack inside listener too
           voicesRef.current = voices;
+          window.speechSynthesis.onvoiceschanged = null; // cleanup
           resolve();
         };
       });
     }
 
+    // Debug Check
+    const debugVoices = voices.filter(v => v.lang.toLowerCase().includes('kn') || v.lang.toLowerCase().includes('hi'));
+    console.log("Available 'kn' or 'hi' voices:", debugVoices);
+
+    // Aggressive Voice Selection + Force Kannada Voice
     let foundVoice: SpeechSynthesisVoice | undefined;
-    if (targetLanguage === 'kn-IN') {
+    if (hasKannada) {
+      // Force Kannada Voice: find a voice where v.lang is exactly 'kn-IN'
       foundVoice = voices.find((v) => v.lang === 'kn-IN');
-    } else if (targetLanguage === 'hi-IN') {
-      foundVoice = voices.find((v) => v.lang === 'hi-IN');
+      
+      // Fallback if not found exactly
+      if (!foundVoice) {
+        foundVoice = voices.find((v) => 
+          v.lang.startsWith('kn') || 
+          v.name.toLowerCase().includes('kannada') ||
+          v.name.toLowerCase().includes('kalpana') ||
+          v.name.toLowerCase().includes('hemant')
+        );
+      }
+    } else if (targetLangCode === 'kn-IN') {
+      foundVoice = voices.find((v) => 
+        v.lang.startsWith('kn') || 
+        v.name.toLowerCase().includes('kannada') ||
+        v.name.toLowerCase().includes('kalpana') ||
+        v.name.toLowerCase().includes('hemant')
+      );
+    } else if (targetLangCode === 'hi-IN') {
+      foundVoice = voices.find((v) => 
+        v.lang.startsWith('hi') || 
+        v.name.toLowerCase().includes('hindi') ||
+        v.name.toLowerCase().includes('hemant') ||
+        v.name.toLowerCase().includes('kalpana')
+      );
     } else {
       foundVoice =
         voices.find((v) => v.lang === 'en-US') ||
         voices.find((v) => v.lang.toLowerCase().startsWith('en'));
     }
 
+    // Explicitly assign utterance.voice = foundVoice if a match is found in the system list
     if (foundVoice) {
+      console.log("Selected voice:", foundVoice.name, foundVoice.lang);
       utterance.voice = foundVoice;
+    } else {
+      console.warn("No specific voice found for lang:", targetLangCode);
     }
-    // Force selected language pack even without an exact voice match.
-    utterance.lang = targetLanguage;
+
+    // Resume Audio: Call window.speechSynthesis.resume() right before speak()
+    window.speechSynthesis.resume();
 
     setIsSpeaking(true);
     window.speechSynthesis.speak(utterance);
